@@ -1,0 +1,148 @@
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ *  THEME — Coldlyne's identity: the cold line.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ *  A message leaves cold and comes back warm. Three palettes say it:
+ *   • ice      the brand: frost, a silvered blue kept low in chroma, for what is cold
+ *              (the line, the horizon, links, focus);
+ *   • ember    the reply: the one warm point on a page, never a surface;
+ *   • midnight the base: blue-black neutrals, dark first.
+ *  Actions are monochrome (white on midnight, midnight on white), so the colour is left
+ *  to the line and the light. Components use the semantic tokens below or the brand,
+ *  ember and base scales, never raw palette classes. Hex mirrors live in lib/brand.ts.
+ */
+
+:root {
+  /* 1. Palettes ------------------------------------------------------------ */
+  --brand-50: oklch(97.8% 0.008 240);
+  --brand-100: oklch(95% 0.016 240);
+  --brand-200: oklch(90.5% 0.03 240);
+  --brand-300: oklch(85% 0.048 238);
+  --brand-400: oklch(77% 0.068 238);
+  --brand-500: oklch(67.5% 0.085 240);
+  --brand-600: oklch(56.5% 0.09 243);
+  --brand-700: oklch(47.5% 0.08 246);
+  --brand-800: oklch(39.5% 0.065 248);
+  --brand-900: oklch(32% 0.05 250);
+  --brand-950: oklch(23.5% 0.035 252);
+
+  --ember-300: oklch(87% 0.075 62);
+  --ember-400: oklch(79% 0.125 58);
+  --ember-500: oklch(72% 0.15 52);
+  --ember-600: oklch(62% 0.16 45);
+
+  --base-50: oklch(98.4% 0.003 255);
+  --base-100: oklch(96.4% 0.005 255);
+  --base-200: oklch(92.2% 0.008 256);
+  --base-300: oklch(86.5% 0.012 257);
+  --base-400: oklch(70.5% 0.018 258);
+  --base-500: oklch(55.5% 0.021 259);
+  --base-600: oklch(44.5% 0.021 261);
+  --base-700: oklch(35% 0.02 263);
+  --base-800: oklch(25.5% 0.018 265);
+  --base-900: oklch(17.5% 0.016 266);
+  --base-950: oklch(12.5% 0.014 268);
+
+  /* Shape, layout & type */
+  --radius: 0.75rem;
+  /* Max width of `.container` (header, pages, footer). */
+  --content-width: 76rem;
+  --font-features: "ss01", "ss02";
+
+  /* 2. Semantic tokens — light --------------------------------------------- */
+  --background: oklch(100% 0 0);
+  --foreground: var(--base-950);
+  --surface: var(--base-50);
+  --card: oklch(100% 0 0);
+  --card-foreground: var(--base-950);
+  --popover: oklch(100% 0 0);
+  --popover-foreground: var(--base-950);
+
+  /* Actions are monochrome; the brand colour is for the line, links and focus. */
+  --primary: var(--base-950);
+  --primary-foreground: var(--base-50);
+  --secondary: var(--base-100);
+  --secondary-foreground: var(--base-900);
+  --muted: var(--base-100);
+  --muted-foreground: var(--base-500);
+  --accent: var(--base-100);
+  --accent-foreground: var(--base-900);
+
+  --link: var(--brand-700);
+  /* The line, cold to warm, and what answers (darker in light mode, for contrast). */
+  --ice: var(--brand-600);
+  --ember: var(--ember-600);
+  /* The accent words of a heading, lit from above; the mark's arc, from its tail to the bead. */
+  --frost-top: var(--base-900);
+  --frost-bottom: var(--brand-600);
+  --mark-from: var(--base-400);
+  --mark-to: var(--base-950);
+
+  --destructive: oklch(57.7% 0.245 27.325);
+  --success: oklch(59.6% 0.145 163.225);
+  --warning: var(--ember-500);
+  --info: var(--brand-600);
+
+  --border: var(--base-200);
+  --input: var(--base-200);
+  --ring: var(--brand-500);
+
+  --chart-1: var(--brand-500);
+  --chart-2: var(--brand-300);
+  --chart-3: var(--ember-500);
+  --chart-4: var(--base-400);
+  --chart-5: var(--ember-300);
+
+  --sidebar: var(--base-50);
+  --sidebar-foreground: var(--base-950);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--base-100);
+  --sidebar-accent-foreground: var(--base-900);
+  --sidebar-border: var(--base-200);
+  --sidebar-ring: var(--ring);
+}
+
+/* 2b. Semantic tokens — dark (the default) --------------------------------- */
+.dark {
+  --background: oklch(10% 0.01 266);
+  --foreground: var(--base-50);
+  --surface: oklch(12.2% 0.011 266);
+  --card: oklch(13.6% 0.012 266);
+  --card-foreground: var(--base-50);
+  --popover: oklch(15.5% 0.015 266);
+  --popover-foreground: var(--base-50);
+
+  --primary: var(--base-50);
+  --primary-foreground: var(--base-950);
+  --secondary: oklch(20% 0.016 266);
+  --secondary-foreground: var(--base-50);
+  --muted: oklch(20% 0.016 266);
+  --muted-foreground: var(--base-400);
+  --accent: oklch(20% 0.016 266);
+  --accent-foreground: var(--base-50);
+
+  --link: var(--brand-200);
+  --ice: var(--brand-300);
+  --ember: var(--ember-400);
+  --frost-top: var(--brand-50);
+  --frost-bottom: var(--brand-400);
+  --mark-from: var(--brand-600);
+  --mark-to: var(--brand-100);
+
+  --destructive: oklch(70.4% 0.191 22.216);
+  --success: oklch(76.5% 0.177 163.223);
+  --warning: var(--ember-400);
+  --info: var(--brand-300);
+
+  --border: oklch(1 0 0 / 7.5%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: var(--brand-400);
+
+  --sidebar: oklch(13.2% 0.013 266);
+  --sidebar-foreground: var(--base-50);
+  --sidebar-accent: oklch(20% 0.016 266);
+  --sidebar-accent-foreground: var(--base-50);
+  --sidebar-border: oklch(1 0 0 / 8%);
+}

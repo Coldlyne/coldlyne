@@ -1,0 +1,11 @@
+allowBuilds:
+  esbuild: true
+  sharp: false
+  unrs-resolver: false
+
+# Security floors for transitive dependencies (Dependabot, 2026-11-03):
+# drizzle-kit's old loader pins esbuild 0.18 (GHSA-67mh-4wv8-2f99, fixed in 0.25);
+# typescript-eslint's minimatch 10 has the globparts amplification (GHSA-g3hv-75wg-m249, fixed in 11.0.1).
+overrides:
+  "@esbuild-kit/core-utils>esbuild": ^0.25.0
+  "@typescript-eslint/typescript-estree>minimatch": ^11.0.1
