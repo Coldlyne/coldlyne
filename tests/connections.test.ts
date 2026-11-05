@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { finishOAuthConnection, startOAuthConnection } from "@/application/connection-grants";
 import { factsOf, publishRecord, readNow, reputationOf, sendTestAlert, tryCheck, tryTestEmail } from "@/application/connection-use";
@@ -5,6 +6,7 @@ import { checkConnection, connectionsOf, connectorsOffered, connectWithFields, c
 import type { Services } from "@/application/services";
 import { sendTestEmail } from "@/application/test-email";
 import { connection } from "@/infrastructure/db/schema/connections";
+import { member } from "@/infrastructure/db/schema/tenancy";
 import type { Database } from "@/infrastructure/db/client";
 import type { Env } from "@/infrastructure/env";
 import { open } from "@/infrastructure/crypto/secrets";
@@ -179,6 +181,13 @@ describe("connecting by signing in", () => {
     const late = await started();
     const later = { ...services, now: () => new Date(now.getTime() + 11 * 60_000) };
     expect((await finishOAuthConnection(later, late.userId, late.state, "code")).ok).toBe(false);
+  });
+
+  it("refuses someone taken out of the workspace while they were at the provider", async () => {
+    const { workspaceId, userId, state } = await started();
+    await db.delete(member).where(eq(member.userId, userId));
+    expect(await finishOAuthConnection({ ...services, fetch: fakeFetch([tokenRoute]).fetch }, userId, state, "code")).toMatchObject({ ok: false });
+    expect(await withWorkspace(db, workspaceId, (tx) => tx.select().from(connection))).toEqual([]);
   });
 
   it("refreshes an expired token and saves the new one, sealed", async () => {

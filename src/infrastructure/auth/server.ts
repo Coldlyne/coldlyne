@@ -6,6 +6,7 @@ import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { requestToResourceInput, verifyAccessTokenRequest } from "better-auth/oauth2";
 import { genericOAuth, jwt } from "better-auth/plugins";
+import { hasLiveInvitation } from "@/application/invitations";
 import { SIGN_UP_REFUSED } from "@/domain/sign-up";
 import { db, schema, type Database } from "../db/client";
 import { env, type Env } from "../env";
@@ -20,7 +21,7 @@ const PASSWORD_SIGN_UP = "/sign-up/email";
 /**
  * Members sign in with the company's identity provider when the instance has one, otherwise with
  * Google or a password as the instance allows; while Coldlyne is private, only the instance's admins
- * may create an account. Coldlyne is also an OAuth server for assistants: Claude, ChatGPT or any MCP
+ * and people with an invitation still good may create an account. Coldlyne is also an OAuth server for assistants: Claude, ChatGPT or any MCP
  * client registers itself, a member signs in and consents, and the assistant gets a token for /mcp.
  */
 export function createAuth(database: Database, settings: Env) {
@@ -49,14 +50,15 @@ export function createAuth(database: Database, settings: Env) {
       user: {
         create: {
           before: async (user, context) => {
+            const invited = await hasLiveInvitation(database, user.email, new Date());
             if (context?.path === PASSWORD_SIGN_UP) {
-              const refusal = passwordSignUpRefusal(user.email, settings);
+              const refusal = passwordSignUpRefusal(user.email, settings, invited);
               // Not a 403: Better Auth answers one here with a pretend success, and they'd wait for a mail that never comes.
               if (refusal) throw new APIError("UNPROCESSABLE_ENTITY", { message: refusal, code: SIGN_UP_REFUSED });
               return;
             }
             // False rather than an error: the provider's callback then sends the person back to the sign-in page.
-            if (!mayJoin(user)) return false;
+            if (!mayJoin(user, invited)) return false;
           },
         },
       },

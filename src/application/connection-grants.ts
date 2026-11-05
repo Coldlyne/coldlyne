@@ -7,6 +7,7 @@ import { connectionGrant } from "@/infrastructure/db/schema/connections";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import { hookUrlOf, safeCheck, saveConnection, viewOf, type Connected } from "./connections";
 import type { Services } from "./services";
+import { roleIn } from "./team";
 
 /** How long a member has to finish signing in to the provider. */
 const GRANT_MINUTES = 10;
@@ -28,12 +29,12 @@ export async function startOAuthConnection(services: Services, workspaceId: stri
 
 /**
  * Finishes it when the provider sends the member back: the grant must be theirs and still
- * fresh; the tokens are checked against the service (whose answer names the account) and
+ * fresh, and they must still be in its workspace; the tokens are checked against the service (whose answer names the account) and
  * sealed. Grants are read by state before the workspace is known, on the trusted path.
  */
 export async function finishOAuthConnection(services: Services, userId: string, state: string, code: string): Promise<Connected & { workspaceId?: string }> {
   const [grant] = await services.db.delete(connectionGrant).where(eq(connectionGrant.state, state)).returning();
-  if (!grant || grant.userId !== userId || grant.expiresAt < services.now()) return { ok: false, error: "Cette connexion a expiré ou ne vous appartient pas : recommencez depuis Coldlyne." };
+  if (!grant || grant.userId !== userId || grant.expiresAt < services.now() || !(await roleIn(services.db, grant.workspaceId, userId))) return { ok: false, error: "Cette connexion a expiré ou ne vous appartient pas : recommencez depuis Coldlyne." };
   const connector = connectorOf(grant.kind);
   if (connector?.authorization.kind !== "oauth") return { ok: false, error: "Service inconnu." };
   const app = oauthApp(connector.authorization.provider, services.settings);

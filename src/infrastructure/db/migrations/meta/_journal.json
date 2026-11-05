@@ -64,6 +64,13 @@
       "when": 1793805600319,
       "tag": "0008_sequences",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793857446508,
+      "tag": "0009_invitations",
+      "breakpoints": true
     }
   ]
 }

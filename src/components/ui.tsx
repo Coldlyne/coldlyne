@@ -25,8 +25,11 @@ export function Code({ children }: { children: ReactNode }) {
   return <code className="block rounded-lg border bg-surface px-3 py-2 font-mono text-xs break-all">{children}</code>;
 }
 
+/** The look of a field beside others in a row, as wide as what it holds. */
+export const INLINE_FIELD = "rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-ring";
+
 /** The look of every text field and list in a form. */
-export const FIELD = "w-full rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-ring";
+export const FIELD = `w-full ${INLINE_FIELD}`;
 
 /** A label over its field. */
 export function Labelled({ label, hint, className = "", children }: { label: string; hint?: string; className?: string; children: ReactNode }) {

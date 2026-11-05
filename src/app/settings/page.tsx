@@ -8,6 +8,7 @@ import { Card, FIELD, Labelled } from "@/components/ui";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { saveBriefAction, savePhoneAction, saveSendingAction } from "./actions";
+import { TeamSection } from "./team-section";
 
 export const metadata: Metadata = { title: "Réglages" };
 
@@ -79,6 +80,7 @@ async function Content() {
           </ActionForm>
         </div>
       </Card>
+      <TeamSection seat={seat} />
       <p className="text-sm text-muted-foreground">
         Pour relier une autre application&nbsp;:{" "}
         <Link href="/keys" className="text-link hover:underline">
@@ -90,7 +92,7 @@ async function Content() {
   );
 }
 
-/** How the workspace sends, what assistants know of it, and the member's own number. */
+/** How the workspace sends, what assistants know of it, the member's own number, and who works in it. */
 export default function SettingsPage() {
   return (
     <Shell>

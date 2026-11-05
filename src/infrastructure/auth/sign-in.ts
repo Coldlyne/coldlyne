@@ -26,10 +26,11 @@ export function signInOf(settings: SignInSettings): SignInMethods {
 }
 
 /**
- * Whether a provider's account may be created while Coldlyne is private. The list trusts the
- * address, so the provider must have verified it: an identity server may let anyone type any address.
+ * Whether a provider's account may be created while Coldlyne is private: for an address on the
+ * list or with an invitation still good. Both trust the address, so the provider must have verified
+ * it: an identity server may let anyone type any address.
  */
-export const mayJoin = (person: { email: string; emailVerified?: boolean | null }) => person.emailVerified === true && isAdmin(person.email);
+export const mayJoin = (person: { email: string; emailVerified?: boolean | null }, invited = false) => person.emailVerified === true && (invited || isAdmin(person.email));
 
 const CLOSED = "Coldlyne n’est ouvert qu’aux personnes invitées pour le moment.";
 
@@ -37,8 +38,8 @@ const CLOSED = "Coldlyne n’est ouvert qu’aux personnes invitées pour le mom
  * Why an account can't be created with a password, if it can't. The address isn't proved yet: the
  * link mailed afterwards proves it and sign-in stays closed until then, so without mail nobody could ever get in.
  */
-export function passwordSignUpRefusal(email: string, settings: Pick<Env, "RESEND_API_KEY">): string | null {
-  if (!isAdmin(email)) return CLOSED;
+export function passwordSignUpRefusal(email: string, settings: Pick<Env, "RESEND_API_KEY">, invited = false): string | null {
+  if (!invited && !isAdmin(email)) return CLOSED;
   return settings.RESEND_API_KEY ? null : "Coldlyne ne peut pas encore envoyer le lien de confirmation : réessayez plus tard.";
 }
 

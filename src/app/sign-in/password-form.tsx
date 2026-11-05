@@ -24,8 +24,8 @@ function wordsFor(error: { code?: string; status?: number; message?: string }): 
   return error.code === SIGN_UP_REFUSED && error.message ? error.message : "La connexion a échoué.";
 }
 
-/** Signs in, creates an account or asks for a new password; an assistant's pending request continues by itself afterwards. */
-export function PasswordForm() {
+/** Signs in, creates an account or asks for a new password, then on to `next`; an assistant's pending request continues by itself afterwards. */
+export function PasswordForm({ next }: { next: string }) {
   const [mode, setMode] = useState<Mode>("sign-in");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +38,8 @@ export function PasswordForm() {
   }
 
   async function ask(email: string, password: string, name: string) {
-    if (mode === "sign-in") return (await authClient.signIn.email({ email, password, callbackURL: "/" })).error;
-    if (mode === "sign-up") return (await authClient.signUp.email({ email, password, name, callbackURL: "/" })).error;
+    if (mode === "sign-in") return (await authClient.signIn.email({ email, password, callbackURL: next })).error;
+    if (mode === "sign-up") return (await authClient.signUp.email({ email, password, name, callbackURL: next })).error;
     return (await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" })).error;
   }
 

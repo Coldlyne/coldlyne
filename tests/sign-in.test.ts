@@ -57,6 +57,17 @@ describe("who may create an account", () => {
     expect(sign.passwordSignUpRefusal("stranger@example.com", { RESEND_API_KEY: "key" })).toContain("invitées");
   });
 
+  it("lets someone with an invitation in through a provider, once the provider has verified the address", () => {
+    expect(sign.mayJoin({ email: "invited@example.com", emailVerified: true }, true)).toBe(true);
+    expect(sign.mayJoin({ email: "invited@example.com", emailVerified: false }, true)).toBe(false);
+    expect(sign.mayJoin({ email: "invited@example.com" }, true)).toBe(false);
+  });
+
+  it("lets someone with an invitation sign up with a password, if the link proving it can be mailed", () => {
+    expect(sign.passwordSignUpRefusal("invited@example.com", { RESEND_API_KEY: "key" }, true)).toBeNull();
+    expect(sign.passwordSignUpRefusal("invited@example.com", { RESEND_API_KEY: undefined }, true)).toContain("lien de confirmation");
+  });
+
   it("lets a listed address sign up with a password only if the link proving it can be mailed", () => {
     expect(sign.passwordSignUpRefusal("founder@example.com", { RESEND_API_KEY: "key" })).toBeNull();
     const refusal = sign.passwordSignUpRefusal("founder@example.com", { RESEND_API_KEY: undefined });

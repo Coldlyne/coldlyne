@@ -4,13 +4,13 @@ import { useState } from "react";
 import { PrimaryButton } from "@/components/ui";
 import { authClient } from "@/infrastructure/auth/client";
 
-/** Signs in with this instance's provider; an assistant's pending request continues by itself afterwards. */
-export function SignInButton({ provider, name }: { provider: string; name: string }) {
+/** Signs in with this instance's provider, then on to `next`; an assistant's pending request continues by itself afterwards. */
+export function SignInButton({ provider, name, next }: { provider: string; name: string; next: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function signIn() {
     setBusy(true);
-    const { error: refused } = await authClient.signIn.social({ provider, callbackURL: "/", errorCallbackURL: "/sign-in" });
+    const { error: refused } = await authClient.signIn.social({ provider, callbackURL: next, errorCallbackURL: next === "/" ? "/sign-in" : `/sign-in?${new URLSearchParams({ next })}` });
     if (refused) {
       setError(refused.message ?? "La connexion a échoué.");
       setBusy(false);
