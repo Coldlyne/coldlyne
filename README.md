@@ -13,7 +13,7 @@ Checks before committing: `pnpm lint && pnpm typecheck && pnpm test:coverage && 
 
 ## Connecting an assistant
 
-Coldlyne's MCP server is at `/mcp`. Add that address to Claude, ChatGPT or any MCP client as a remote connector: the client registers itself, you sign in and approve it, and it acts inside your workspace with the workspace's rules. If you belong to several workspaces, one connection covers them all and the assistant says which one on every call.
+Coldlyne's MCP server is at `/api/mcp`. Add that address to Claude, ChatGPT or any MCP client as a remote connector: the client registers itself, you sign in and approve it, and it acts inside your workspace with the workspace's rules. If you belong to several workspaces, one connection covers them all and the assistant says which one on every call.
 
 ## Running your own
 

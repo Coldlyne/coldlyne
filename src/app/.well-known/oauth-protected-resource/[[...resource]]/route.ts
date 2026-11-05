@@ -3,7 +3,7 @@ import { mcpResource, tokenIssuer } from "@/infrastructure/auth/server";
 import { env } from "@/infrastructure/env";
 
 /**
- * What an assistant reads after a 401 from /mcp (RFC 9728): the resource it is reaching, and
+ * What an assistant reads after a 401 from /api/mcp (RFC 9728): the resource it is reaching, and
  * which server signs tokens for it. The issuer is Better Auth's, under its base path.
  */
 export async function GET() {

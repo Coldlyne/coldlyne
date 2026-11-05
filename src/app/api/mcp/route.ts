@@ -8,7 +8,7 @@ import { answerInFull } from "./answer-in-full";
 import { coldlyneServer } from "./server";
 
 /** Where an assistant learns how to sign in, per the MCP authorization spec (RFC 9728). */
-const resourceMetadataUrl = () => new URL("/.well-known/oauth-protected-resource/mcp", env().BETTER_AUTH_URL).toString();
+const resourceMetadataUrl = () => new URL("/.well-known/oauth-protected-resource/api/mcp", env().BETTER_AUTH_URL).toString();
 
 function unauthorized(detail: string): Response {
   return Response.json(

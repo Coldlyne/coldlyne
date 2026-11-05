@@ -14,7 +14,7 @@ import { sendOwnMail } from "../mail/own-mail";
 import { accountMail, companyLogin, mayJoin, passwordSignUpRefusal, signInOf } from "./sign-in";
 
 /** The MCP server's address: the only audience the assistants' tokens are good for. */
-export const mcpResource = (settings: Pick<Env, "BETTER_AUTH_URL">) => new URL("/mcp", settings.BETTER_AUTH_URL).toString();
+export const mcpResource = (settings: Pick<Env, "BETTER_AUTH_URL">) => new URL("/api/mcp", settings.BETTER_AUTH_URL).toString();
 
 const PASSWORD_SIGN_UP = "/sign-up/email";
 
@@ -22,7 +22,7 @@ const PASSWORD_SIGN_UP = "/sign-up/email";
  * Members sign in with the company's identity provider when the instance has one, otherwise with
  * Google or a password as the instance allows; while Coldlyne is private, only the instance's admins
  * and people with an invitation still good may create an account. Coldlyne is also an OAuth server for assistants: Claude, ChatGPT or any MCP
- * client registers itself, a member signs in and consents, and the assistant gets a token for /mcp.
+ * client registers itself, a member signs in and consents, and the assistant gets a token for /api/mcp.
  */
 export function createAuth(database: Database, settings: Env) {
   const company = companyLogin(settings);
@@ -89,7 +89,7 @@ export type Auth = ReturnType<typeof createAuth>;
 /** Who signs tokens: Better Auth, under its base path. */
 export const tokenIssuer = (settings: Pick<Env, "BETTER_AUTH_URL">) => new URL("/api/auth", settings.BETTER_AUTH_URL).toString();
 
-/** Whose token a request to /mcp carries: its signature, issuer, audience and expiry checked. Throws when any fails. */
+/** Whose token a request to /api/mcp carries: its signature, issuer, audience and expiry checked. Throws when any fails. */
 export async function memberOfToken(request: Request, settings: Pick<Env, "BETTER_AUTH_URL">): Promise<{ userId: string; clientId: string }> {
   const issuer = tokenIssuer(settings);
   const payload = await verifyAccessTokenRequest(requestToResourceInput(request), { jwksUrl: `${issuer}/jwks`, verifyOptions: { issuer, audience: mcpResource(settings) } });

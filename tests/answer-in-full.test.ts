@@ -1,10 +1,10 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { answerInFull } from "@/app/mcp/answer-in-full";
+import { answerInFull } from "@/app/api/mcp/answer-in-full";
 
 const post = (method: string) =>
-  new Request("https://coldlyne.test/mcp", {
+  new Request("https://coldlyne.test/api/mcp", {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: method === "tools/call" ? { name: "slow", arguments: {} } : {} }),
@@ -49,7 +49,7 @@ describe("an assistant's call to a tool", () => {
 
   it("leaves a body it can't read to the server, which refuses it", async () => {
     const refused = Response.json({ error: "bad" }, { status: 400 });
-    const request = new Request("https://coldlyne.test/mcp", { method: "POST", body: "pas du json" });
+    const request = new Request("https://coldlyne.test/api/mcp", { method: "POST", body: "pas du json" });
     await expect(answerInFull(request, async () => refused)).resolves.toBe(refused);
   });
 });
