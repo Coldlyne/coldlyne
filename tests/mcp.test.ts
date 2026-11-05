@@ -23,7 +23,7 @@ beforeAll(async () => {
 
 /** Speaks to the MCP server over HTTP, as an assistant does (one JSON-RPC exchange per request). */
 function clientFor(workspaceId: string, userId: string) {
-  const handler = createMcpHandler(() => coldlyneServer({ services, workspaceId, userId }));
+  const handler = createMcpHandler(() => coldlyneServer({ services, userId, workspaces: [{ id: workspaceId, name: "Northwind", role: "owner" }] }));
   return async function call(method: string, params: Record<string, unknown> = {}) {
     const response = await handler.fetch(
       new Request("https://coldlyne.test/mcp", {
