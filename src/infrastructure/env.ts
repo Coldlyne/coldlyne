@@ -9,7 +9,7 @@ const schema = z.object({
   COLDLYNE_DATABASE_URL: z.url(),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
-  /** Who may sign up while Coldlyne is private: comma-separated emails. */
+  /** Who may sign up and start workspaces while Coldlyne is private: comma-separated emails. Anyone else needs an invitation, and can only join. */
   COLDLYNE_ADMINS: z.string().default(""),
   /** 32 random bytes, base64 (openssl rand -base64 32): seals every connection's credentials. */
   COLDLYNE_SECRETS_KEY: z.string().optional(),
@@ -44,10 +44,9 @@ export function env(): Env {
   return parsed;
 }
 
-/** Whether this email may sign up while Coldlyne is private. */
-export function isAdmin(email: string): boolean {
-  return env()
-    .COLDLYNE_ADMINS.split(",")
+/** Whether this email may sign up without an invitation and start workspaces while Coldlyne is private. */
+export function isAdmin(email: string, settings: Pick<Env, "COLDLYNE_ADMINS"> = env()): boolean {
+  return settings.COLDLYNE_ADMINS.split(",")
     .map((entry) => entry.trim().toLowerCase())
     .includes(email.trim().toLowerCase());
 }

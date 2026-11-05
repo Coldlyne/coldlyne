@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
-import { currentMember } from "@/infrastructure/auth/session";
+import { mayStartWorkspace } from "@/application/workspaces";
+import { currentMember, workspacesInBrowser, type Member } from "@/infrastructure/auth/session";
+import { env } from "@/infrastructure/env";
 import { Logo } from "./logo";
 import { SignOutButton } from "./sign-out-button";
+import { WorkspaceMenu } from "./workspace-menu";
 
 const NAV = [
   { href: "/today", label: "Aujourd’hui" },
@@ -15,12 +18,22 @@ const NAV = [
   { href: "/settings", label: "Réglages" },
 ];
 
-/** Who is signed in, streamed in once the session is read. */
+/** Which workspace this is and the way to another. With nothing else to reach, there's nothing to choose and nothing shows. */
+async function WorkspaceSwitcher({ member }: { member: Member }) {
+  const { workspaces, active } = await workspacesInBrowser(member.userId);
+  const mayStart = mayStartWorkspace(member.email, env());
+  if (!active || (workspaces.length === 1 && !mayStart)) return null;
+  const others = workspaces.filter(({ id }) => id !== active.id).map(({ id, name }) => ({ id, name }));
+  return <WorkspaceMenu current={active.name} others={others} mayStart={mayStart} />;
+}
+
+/** Who is signed in and where, streamed in once the session is read. */
 async function WhoIsSignedIn() {
   const member = await currentMember();
   if (!member) return null;
   return (
     <span className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground">
+      <WorkspaceSwitcher member={member} />
       <SignOutButton />
     </span>
   );
