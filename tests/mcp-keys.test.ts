@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { coldlyneServer } from "@/app/api/mcp/server";
 import * as figuresRoute from "@/app/api/v1/figures/route";
+import { removeMember } from "@/application/team";
 import { apiKeysForManager, createApiKey, revokeApiKey } from "@/application/api-keys";
 import { createList } from "@/application/prospects";
 import type { Services } from "@/application/services";
@@ -262,5 +263,20 @@ describe("the logs", () => {
     const logged = JSON.stringify(written);
     expect(logged).not.toContain(key);
     expect(logged).not.toContain(sha256(key));
+  });
+});
+
+describe("a key an assistant made", () => {
+  it("stops working when its member is removed", async () => {
+    const { workspaceId, userId: owner } = await createTestWorkspace(db);
+    const asker = await teammate(workspaceId, "admin");
+    const { key } = (await tool(asker, "create_api_key", { name: "Tableau de bord" })).structuredContent;
+    expect((await figures(key)).status).toBe(200);
+    expect((await removeMember(db, workspaceId, owner, asker)).ok).toBe(true);
+    expect((await figures(key)).status).toBe(401);
+  });
+
+  it("is said to end with its member, when it's made", async () => {
+    expect((await toolNamed("create_api_key")).description).toContain("stops working when this member leaves the workspace");
   });
 });

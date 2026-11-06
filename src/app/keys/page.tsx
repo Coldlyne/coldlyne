@@ -52,7 +52,7 @@ async function Keys() {
 export default function KeysPage() {
   return (
     <Shell>
-      <PageHeading title="Clés d’API" eyebrow={<Eyebrow><Link href="/settings" className="hover:text-foreground">Réglages</Link></Eyebrow>}>Pour qu’une autre application lise vos chiffres, sans jamais voir vos prospects.</PageHeading>
+      <PageHeading title="Clés d’API" eyebrow={<Eyebrow><Link href="/settings" className="hover:text-foreground">Réglages</Link></Eyebrow>}>Pour qu’une autre application lise vos chiffres, sans jamais voir vos prospects. Une clé cesse de fonctionner quand la personne qui l’a créée quitte l’espace.</PageHeading>
       <Suspense fallback={<Loading />}>
         <Keys />
       </Suspense>

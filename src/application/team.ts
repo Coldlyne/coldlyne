@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { refusalToChangeRole, refusalToRemove, type Role } from "@/domain/team";
 import { user } from "@/infrastructure/db/schema/auth";
 import type { Database } from "@/infrastructure/db/client";
-import { connection } from "@/infrastructure/db/schema/connections";
+import { apiKey, connection } from "@/infrastructure/db/schema/connections";
 import { sequence, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { member } from "@/infrastructure/db/schema/tenancy";
 import { withWorkspace } from "@/infrastructure/db/tenant";
@@ -46,16 +46,24 @@ async function handOver(tx: Database, workspaceId: string, from: string, to: str
   });
 }
 
-/** Takes someone out of a workspace, themselves included when they leave. Their access ends at once: every path re-reads membership. */
+/** The keys someone made stop with them: a key is shown once, so it may well have left with them. Only this workspace's, whatever group it's in. Says how many. */
+async function endKeysMadeBy(tx: Database, workspaceId: string, userId: string): Promise<number> {
+  const ended = await withWorkspace(tx, workspaceId, (own) => own.delete(apiKey).where(eq(apiKey.createdBy, userId)).returning({ id: apiKey.id }));
+  return ended.length;
+}
+
+/** Takes someone out of a workspace, themselves included when they leave. Their access ends at once: every path re-reads membership, and the keys they made go in the same transaction. */
 export async function removeMember(db: Database, workspaceId: string, actorId: string, targetId: string): Promise<Tried> {
   return db.transaction(async (tx) => {
     const team = await lockedTeam(tx, workspaceId);
     const refused = refusalToRemove(team, actorId, targetId);
     if (refused) return { ok: false, error: refused };
     await tx.delete(member).where(and(eq(member.workspaceId, workspaceId), eq(member.userId, targetId)));
+    const keysEnded = await endKeysMadeBy(tx, workspaceId, targetId);
     const heir = team.find(({ role, userId }) => role === "owner" && userId !== targetId);
     if (heir) await handOver(tx, workspaceId, targetId, heir.userId);
-    return { ok: true, said: actorId === targetId ? "Vous avez quitté cet espace." : "Cette personne n’a plus accès à cet espace." };
+    const left = actorId === targetId ? "Vous avez quitté cet espace." : "Cette personne n’a plus accès à cet espace.";
+    return { ok: true, said: keysEnded > 0 ? `${left} ${actorId === targetId ? "Les clés d’API que vous aviez créées" : "Les clés d’API qu’elle avait créées"} ne fonctionnent plus.` : left };
   });
 }
 

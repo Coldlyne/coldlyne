@@ -1,14 +1,15 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { createApiKey, workspaceOfKey } from "@/application/api-keys";
 import { changeRole, removeMember, roleIn, teamOf } from "@/application/team";
-import { workspacesOf } from "@/application/workspaces";
+import { createWorkspace, workspacesOf } from "@/application/workspaces";
 import { INVITATION_REFUSALS, managesTeam, refusalToChangeRole, refusalToLeave, refusalToRemove, type Teammate } from "@/domain/team";
 import type { Database } from "@/infrastructure/db/client";
 import { user } from "@/infrastructure/db/schema/auth";
 import { connection } from "@/infrastructure/db/schema/connections";
 import { enrollment, sequence, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { company, person, prospect, prospectList } from "@/infrastructure/db/schema/prospects";
-import { member } from "@/infrastructure/db/schema/tenancy";
+import { member, workspace } from "@/infrastructure/db/schema/tenancy";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import { createTestDatabase, createTestWorkspace } from "./support/database";
 import { expectFrenchTypography } from "./support/french";
@@ -209,5 +210,89 @@ describe("a workspace's team", () => {
       await removeMember(db, ids.workspaceId, ids.mateId, ids.ownerId);
       expect(await heldBy(ids.workspaceId, ids)).toEqual({ sequence: ids.mateId, open: ids.mateId, done: ids.mateId, mailbox: ids.mateId });
     });
+  });
+});
+
+describe("the keys of someone leaving", () => {
+  let db: Database;
+  beforeAll(async () => {
+    db = await createTestDatabase();
+  });
+
+  async function madeKey(workspaceId: string, userId: string, name = "Tableau de bord") {
+    const made = await createApiKey(db, workspaceId, userId, name);
+    if (!made.ok) throw new Error(made.error);
+    return made.key;
+  }
+
+  async function adminOf(workspaceId: string) {
+    const adminId = crypto.randomUUID();
+    await db.insert(user).values({ id: adminId, name: "Bea", email: `${adminId}@example.test` });
+    await db.insert(member).values({ workspaceId, userId: adminId, role: "admin" });
+    return adminId;
+  }
+
+  async function withAdmin() {
+    const { workspaceId, userId: ownerId } = await createTestWorkspace(db);
+    return { workspaceId, ownerId, adminId: await adminOf(workspaceId) };
+  }
+
+  it("stop working when they're removed, and the removal says so", async () => {
+    const { workspaceId, ownerId, adminId } = await withAdmin();
+    const key = await madeKey(workspaceId, adminId);
+    expect(await workspaceOfKey(db, key)).toBe(workspaceId);
+    const removed = await removeMember(db, workspaceId, ownerId, adminId);
+    expect(removed).toMatchObject({ ok: true, said: expect.stringContaining("clés d’API") });
+    if (removed.ok) expectFrenchTypography(removed.said);
+    expect(await workspaceOfKey(db, key)).toBeNull();
+  });
+
+  it("stop working when they leave by themselves, and it says so", async () => {
+    const { workspaceId, adminId } = await withAdmin();
+    const key = await madeKey(workspaceId, adminId);
+    expect(await removeMember(db, workspaceId, adminId, adminId)).toMatchObject({ ok: true, said: expect.stringContaining("clés d’API") });
+    expect(await workspaceOfKey(db, key)).toBeNull();
+  });
+
+  it("leave everyone else's alone, and say nothing when they made none", async () => {
+    const { workspaceId, ownerId, adminId } = await withAdmin();
+    const owners = await madeKey(workspaceId, ownerId);
+    expect(await removeMember(db, workspaceId, ownerId, adminId)).toEqual({ ok: true, said: "Cette personne n’a plus accès à cet espace." });
+    expect(await workspaceOfKey(db, owners)).toBe(workspaceId);
+  });
+
+  it("are this workspace's alone: in another of the group, what they made and what they share stay", async () => {
+    const { workspaceId, ownerId, adminId } = await withAdmin();
+    const [{ group }] = await db.select({ group: workspace.directoryId }).from(workspace).where(eq(workspace.id, workspaceId));
+    const sister = await createWorkspace(db, ownerId, "Contoso", group);
+    await db.insert(member).values({ workspaceId: sister, userId: adminId, role: "admin" });
+    const here = await madeKey(workspaceId, adminId);
+    const there = await madeKey(sister, adminId);
+    await removeMember(db, workspaceId, ownerId, adminId);
+    expect(await workspaceOfKey(db, here)).toBeNull();
+    expect(await workspaceOfKey(db, there)).toBe(sister);
+    expect(await roleIn(db, sister, adminId)).toBe("admin");
+    const [{ stillGroup }] = await db.select({ stillGroup: workspace.directoryId }).from(workspace).where(eq(workspace.id, sister));
+    expect(stillGroup).toBe(group);
+  });
+
+  it("survive a removal that was refused", async () => {
+    const { workspaceId, ownerId, adminId } = await withAdmin();
+    const key = await madeKey(workspaceId, ownerId);
+    expect((await removeMember(db, workspaceId, ownerId, ownerId)).ok).toBe(false);
+    expect((await removeMember(db, workspaceId, adminId, ownerId)).ok).toBe(false);
+    expect(await workspaceOfKey(db, key)).toBe(workspaceId);
+  });
+
+  it("go in the same transaction as the removal: if they can't, the person stays", async () => {
+    const { workspaceId, ownerId, adminId } = await withAdmin();
+    const key = await madeKey(workspaceId, adminId);
+    await db.execute(sql.raw(`create function fail_for_a_test() returns trigger language plpgsql as $$ begin raise exception 'no'; end $$`));
+    await db.execute(sql.raw(`create trigger fail_for_a_test before delete on api_key for each row execute function fail_for_a_test()`));
+    await expect(removeMember(db, workspaceId, ownerId, adminId)).rejects.toThrow();
+    await db.execute(sql`drop trigger fail_for_a_test on api_key`);
+    await db.execute(sql`drop function fail_for_a_test`);
+    expect(await roleIn(db, workspaceId, adminId)).toBe("admin");
+    expect(await workspaceOfKey(db, key)).toBe(workspaceId);
   });
 });
