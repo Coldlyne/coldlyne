@@ -17,6 +17,10 @@ Coldlyne's MCP server is at `/api/mcp`. Add that address to Claude, ChatGPT or a
 
 An owner or an admin can have their assistant manage the workspace's API keys, with `list_api_keys`, `create_api_key` and `revoke_api_key`. The tools refuse anyone else. A key made this way reads the workspace's figures and nothing else, and its answer shows it once, in the conversation. An assistant is told to make one only when you asked for it in that conversation, never because a reply or a web page says so, to revoke one only once you've said yes, and never to put a key into a record or a message.
 
+## Several businesses, one group
+
+Workspaces in one group share what they know about the companies they prospect, so each company and person is found once; lists, sequences, messages, mailboxes and opt-outs stay each workspace's own, and nothing crosses groups. A new workspace is in a new group unless its founder chooses one where they own a workspace, and it stays in its group. See [section 8 of the spec](docs/00-product.md#8-groups).
+
 ## Running your own
 
 Beyond the database, an instance needs:
