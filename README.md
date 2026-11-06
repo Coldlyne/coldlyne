@@ -36,6 +36,8 @@ Beyond the database, an instance needs:
 - `CRON_SECRET`, which Vercel's cron sends to `/api/cron/send` (every 15 minutes: whoever is due gets their step), `/api/cron/sync` (hourly: mailboxes and calendars) and `/api/cron/watch` (daily: watchlists). Elsewhere, call them on that schedule with `Authorization: Bearer <secret>`.
 - Optionally `RESEND_API_KEY`, for Coldlyne's own mail to its members (needed for passwords; without it, an invitation's link is shown to copy). It never carries prospecting.
 
+**Upgrading an instance that already has several workspaces:** migration `0010` puts workspaces with the same oldest owner in one group, for good, and they then share companies and people. If one person started workspaces for different customers, they would land together. Read what `scripts/directory-preview.sql` says under `landing_together` before you run it.
+
 Everything else (mailboxes, SMS, letters, telephony, WhatsApp, CRMs, DNS) is connected per workspace from the Connections page, where each service says what to do in its console. See [section 5 of the spec](docs/00-product.md#5-connections).
 
 ## License
