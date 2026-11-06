@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { PrimaryButton } from "@/components/ui";
+import { INLINE_FIELD, PrimaryButton } from "@/components/ui";
 import { importCsvAction, importSheetAction, type ImportState } from "../actions";
 
 /** What came of an import: what was added, and each row left out with why. */
@@ -35,7 +35,7 @@ export function ImportForm({ listId }: { listId: string }) {
   return (
     <form action={submit} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <input type="file" name="file" accept=".csv,text/csv" required className="min-w-0 flex-1 text-sm text-muted-foreground" />
+        <input type="file" name="file" accept=".csv,text/csv" required className="min-w-0 flex-1 text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-full file:border file:border-solid file:border-border file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground" />
         <PrimaryButton type="submit" disabled={pending}>
           {pending ? "Import en cours…" : "Importer"}
         </PrimaryButton>
@@ -53,8 +53,8 @@ export function SheetImportForm({ listId, connectionId, label }: { listId: strin
     <form action={submit} className="flex flex-col gap-3">
       <p className="text-sm font-medium">Importer une feuille de {label}</p>
       <div className="flex flex-wrap items-center gap-3">
-        <input name="spreadsheet" required placeholder="L’adresse de la feuille" aria-label="L’adresse de la feuille" className="min-w-0 flex-[2] rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-ring" />
-        <input name="range" placeholder="Plage (facultatif)" aria-label="Plage (facultatif)" className="min-w-0 flex-1 rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-ring" />
+        <input name="spreadsheet" required placeholder="L’adresse de la feuille" aria-label="L’adresse de la feuille" className={`${INLINE_FIELD} min-w-0 flex-[2] basis-56`} />
+        <input name="range" placeholder="Plage (facultatif)" aria-label="Plage (facultatif)" className={`${INLINE_FIELD} min-w-0 flex-1 basis-32`} />
         <PrimaryButton type="submit" disabled={pending}>
           {pending ? "Import en cours…" : "Importer"}
         </PrimaryButton>

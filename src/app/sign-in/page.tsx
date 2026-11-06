@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { Logo } from "@/components/logo";
+import { AuthFrame } from "@/components/auth-frame";
 import { safeNext } from "@/domain/safe-next";
 import { signInOf, type SignInMethods } from "@/infrastructure/auth/sign-in";
 import { env } from "@/infrastructure/env";
@@ -28,7 +28,7 @@ async function SignIn({ searchParams }: Pick<PageProps<"/sign-in">, "searchParam
   const next = safeNext(asked);
   return (
     <>
-      <p className="mt-3 max-w-sm text-center text-sm text-muted-foreground">{introOf(ways, next)}</p>
+      <p className="mt-4 max-w-sm text-center text-sm text-pretty text-muted-foreground">{introOf(ways, next)}</p>
       {ways.provider && (
         <div className="mt-8">
           <SignInButton provider={ways.provider.id} name={ways.provider.name} next={next} />
@@ -44,15 +44,16 @@ async function SignIn({ searchParams }: Pick<PageProps<"/sign-in">, "searchParam
 /** Where members sign in, and where an assistant sends them before they approve it. */
 export default function SignInPage({ searchParams }: PageProps<"/sign-in">) {
   return (
-    <main className="relative isolate flex flex-1 flex-col items-center justify-center px-4 py-16">
-      <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-96 bg-glow" />
-      <Logo id="sign-in" />
-      <h1 className="mt-8 text-center text-3xl font-semibold tracking-[-0.04em]">
-        Votre prospection, <span className="font-serif font-normal italic tracking-normal text-frost">depuis votre assistant</span>
+    <AuthFrame id="sign-in">
+      <h1 className="mt-9 max-w-xl text-center text-4xl leading-[1.02] font-medium tracking-[-0.045em] text-balance md:text-5xl">
+        <span className="text-display">Votre prospection,</span>
+        <span className="block pr-1 pb-1 font-serif font-normal tracking-[-0.015em] text-frost italic">
+          depuis votre assistant<span className="text-ember not-italic">.</span>
+        </span>
       </h1>
       <Suspense>
         <SignIn searchParams={searchParams} />
       </Suspense>
-    </main>
+    </AuthFrame>
   );
 }

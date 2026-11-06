@@ -3,10 +3,11 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { listsOf } from "@/application/prospects";
 import { Loading, PageHeading, Shell } from "@/components/shell";
-import { Card, PrimaryButton } from "@/components/ui";
+import { Card, EmptyState, INLINE_FIELD, PrimaryButton, Rows, Tag } from "@/components/ui";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { createListAction } from "./actions";
+import { ListChecks } from "lucide-react";
 
 export const metadata: Metadata = { title: "Listes" };
 
@@ -17,23 +18,27 @@ async function Lists() {
     <div className="space-y-4">
       <Card>
         <form action={createListAction} className="flex flex-wrap gap-3">
-          <input name="name" required maxLength={120} placeholder="Holdings du Rhône" className="min-w-0 flex-1 rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-ring" />
+          <input name="name" required maxLength={120} placeholder="Holdings du Rhône" aria-label="Nom de la liste" className={`${INLINE_FIELD} min-w-0 flex-1 basis-56`} />
           <PrimaryButton type="submit">Créer une liste</PrimaryButton>
         </form>
       </Card>
-      {lists.length > 0 && (
-        <ul className="divide-y rounded-2xl border bg-card">
+      {lists.length === 0 ? (
+        <EmptyState icon={ListChecks} title="Aucune liste pour le moment">
+          Demandez à votre assistant de trouver les personnes à joindre, ou créez une liste ici et importez votre fichier.
+        </EmptyState>
+      ) : (
+        <Rows>
           {lists.map((list) => (
             <li key={list.id}>
-              <Link href={`/lists/${list.id}`} className="flex items-baseline justify-between gap-4 px-5 py-3 text-sm transition-colors hover:bg-accent">
+              <Link href={`/lists/${list.id}`} className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm transition-colors hover:bg-accent">
                 <span className="min-w-0 truncate font-medium">{list.name}</span>
-                <span className="shrink-0 text-muted-foreground">
+                <Tag>
                   {list.prospects} {list.prospects > 1 ? "prospects" : "prospect"}
-                </span>
+                </Tag>
               </Link>
             </li>
           ))}
-        </ul>
+        </Rows>
       )}
     </div>
   );

@@ -3,10 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { mayStartWorkspace, startWorkspace, workspacesOf } from "@/application/workspaces";
-import { Logo } from "@/components/logo";
+import { AuthCard, AuthFrame, AuthTitle } from "@/components/auth-frame";
 import { Loading } from "@/components/shell";
 import { SignOutButton } from "@/components/sign-out-button";
-import { Card, PrimaryButton } from "@/components/ui";
+import { FIELD, PrimaryButton } from "@/components/ui";
 import { safeNext } from "@/domain/safe-next";
 import { currentMember, enterWorkspace } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
@@ -26,13 +26,13 @@ async function create(formData: FormData) {
 /** Someone with an account and no workspace who may not start one: an invitation that was cancelled, or a workspace they were taken out of. */
 function NoWorkspace() {
   return (
-    <Card className="mt-8 w-full max-w-md">
-      <h1 className="text-xl font-semibold tracking-[-0.03em]">Vous n’avez accès à aucun espace</h1>
+    <AuthCard>
+      <AuthTitle>Vous n’avez accès à aucun espace</AuthTitle>
       <p className="mt-2 text-sm text-muted-foreground">Sur Coldlyne, on rejoint un espace sur invitation&nbsp;: demandez un nouveau lien à la personne qui l’administre, puis ouvrez-le.</p>
       <div className="mt-5 text-sm text-muted-foreground">
         <SignOutButton />
       </div>
-    </Card>
+    </AuthCard>
   );
 }
 
@@ -47,12 +47,12 @@ async function Form({ searchParams }: { searchParams: PageProps<"/welcome">["sea
     return <NoWorkspace />;
   }
   return (
-    <Card className="mt-8 w-full max-w-md">
-      <h1 className="text-xl font-semibold tracking-[-0.03em]">Quelle entreprise prospecte ?</h1>
+    <AuthCard>
+      <AuthTitle>Quelle entreprise prospecte ?</AuthTitle>
       <p className="mt-2 text-sm text-muted-foreground">Chaque espace garde ses listes, ses boîtes et ses exclusions à part.</p>
       <form action={create} className="mt-5 flex flex-col gap-3">
         <input type="hidden" name="next" value={safeNext(next)} />
-        <input name="name" required maxLength={80} placeholder="Acme" className="rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-ring" />
+        <input name="name" required maxLength={80} placeholder="Acme" aria-label="Nom de l’entreprise" className={FIELD} />
         <PrimaryButton type="submit">Créer l’espace</PrimaryButton>
       </form>
       {hasWorkspace && (
@@ -62,19 +62,17 @@ async function Form({ searchParams }: { searchParams: PageProps<"/welcome">["sea
           </Link>
         </p>
       )}
-    </Card>
+    </AuthCard>
   );
 }
 
 /** The first thing a new member sees, and where an admin starts another: a workspace, named. */
 export default function WelcomePage({ searchParams }: PageProps<"/welcome">) {
   return (
-    <main className="relative isolate flex flex-1 flex-col items-center justify-center px-4 py-16">
-      <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-96 bg-glow" />
-      <Logo id="welcome" />
+    <AuthFrame id="welcome">
       <Suspense fallback={<Loading />}>
         <Form searchParams={searchParams} />
       </Suspense>
-    </main>
+    </AuthFrame>
   );
 }

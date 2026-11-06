@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { apiKeysOf } from "@/application/api-keys";
 import { Loading, PageHeading, Shell } from "@/components/shell";
-import { Card, Code, QuietButton } from "@/components/ui";
+import { Card, Code, Eyebrow, QuietButton, Rows } from "@/components/ui";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { env } from "@/infrastructure/env";
@@ -26,7 +27,7 @@ async function Keys() {
         </div>
       </Card>
       {keys.length > 0 && (
-        <ul className="divide-y rounded-2xl border bg-card">
+        <Rows>
           {keys.map((key) => (
             <li key={key.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 text-sm">
               <span className="font-medium">{key.name}</span>
@@ -37,7 +38,7 @@ async function Keys() {
               </form>
             </li>
           ))}
-        </ul>
+        </Rows>
       )}
     </div>
   );
@@ -47,7 +48,7 @@ async function Keys() {
 export default function KeysPage() {
   return (
     <Shell>
-      <PageHeading title="Clés d’API">Pour qu’une autre application lise vos chiffres, sans jamais voir vos prospects.</PageHeading>
+      <PageHeading title="Clés d’API" eyebrow={<Eyebrow><Link href="/settings" className="hover:text-foreground">Réglages</Link></Eyebrow>}>Pour qu’une autre application lise vos chiffres, sans jamais voir vos prospects.</PageHeading>
       <Suspense fallback={<Loading />}>
         <Keys />
       </Suspense>

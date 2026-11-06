@@ -4,11 +4,13 @@ import { Suspense } from "react";
 import { tasksOf, type DayTask } from "@/application/tasks";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { ActionForm, CopyButton, TryButton } from "@/components/try-button";
-import { Card, FIELD, QuietButton } from "@/components/ui";
+import { Card, EmptyState, FIELD, QuietButton, Tag } from "@/components/ui";
 import { CHANNEL_NAMES } from "@/domain/sequences";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { callAction, completeTaskAction, voicemailAction } from "./actions";
+import { CheckCheck } from "lucide-react";
+import { ChannelTile } from "@/components/channel-icon";
 
 export const metadata: Metadata = { title: "Aujourd’hui" };
 
@@ -42,18 +44,21 @@ function Task({ task }: { task: DayTask }) {
   const outcomes = OUTCOMES.filter((outcome) => outcome.call === isCall(task) || outcome.value === "replied");
   return (
     <Card>
-      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-        <span className="font-medium">{CHANNEL_NAMES[task.channel]}</span>
-        <span className="font-medium">{task.person}</span>
-        <span className="text-muted-foreground">
-          {task.role ? `${task.role}, ` : ""}
-          {task.company}
-        </span>
-        <span className="ml-auto text-sm">
+      <div className="flex min-w-0 items-start gap-3">
+        <ChannelTile channel={task.channel} />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium tracking-[-0.015em]">{task.person}</p>
+          <p className="text-sm text-muted-foreground">
+            {task.role ? `${task.role}, ` : ""}
+            {task.company}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5 text-sm">
+          <Tag>{CHANNEL_NAMES[task.channel]}</Tag>
           <Where task={task} />
-        </span>
-      </p>
-      <p className="mt-3 text-sm whitespace-pre-line text-muted-foreground">{task.text}</p>
+        </div>
+      </div>
+      {task.text && <p className="mt-4 rounded-xl border bg-surface p-4 text-sm whitespace-pre-line">{task.text}</p>}
       <p className="mt-2 text-xs text-muted-foreground">
         <Link href={`/sequences/${task.sequenceId}`} className="hover:underline">
           {task.sequence}
@@ -83,7 +88,7 @@ function Task({ task }: { task: DayTask }) {
 async function Tasks() {
   const seat = await currentSeat();
   const tasks = await tasksOf(db(), seat.workspaceId, seat.userId);
-  if (tasks.length === 0) return <p className="text-sm text-muted-foreground">Rien à faire pour le moment&nbsp;: Coldlyne s’occupe du reste.</p>;
+  if (tasks.length === 0) return <EmptyState icon={CheckCheck} title="Rien à faire pour le moment">Coldlyne s’occupe du reste.</EmptyState>;
   return (
     <div className="space-y-4">
       {tasks.map((task) => (

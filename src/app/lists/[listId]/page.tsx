@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Fragment, Suspense } from "react";
 import { connectionsWith } from "@/application/connections";
 import { contactsOf, pushesOf } from "@/application/contacts";
 import { listsOf, prospectsOf } from "@/application/prospects";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { TryButton } from "@/components/try-button";
-import { Card } from "@/components/ui";
+import { Card, EmptyState, Eyebrow, Rows, Tag } from "@/components/ui";
 import { notFound } from "next/navigation";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { appServices } from "@/infrastructure/services";
 import { pushToCrmAction } from "../actions";
 import { ImportForm, SheetImportForm } from "./import-form";
+import { Users } from "lucide-react";
 
 export const metadata: Metadata = { title: "Liste" };
 
@@ -30,7 +32,7 @@ async function List({ params }: { params: PageProps<"/lists/[listId]">["params"]
   const [crms, sheets, pushes] = await Promise.all([connectionsWith(services, seat.workspaceId, "push_contacts"), connectionsWith(services, seat.workspaceId, "read_sheet"), pushesOf(db(), seat.workspaceId, prospects.map((found) => found.id))]);
   return (
     <>
-      <PageHeading title={list.name} />
+      <PageHeading title={list.name} eyebrow={<Eyebrow><Link href="/lists" className="hover:text-foreground">Listes</Link></Eyebrow>} />
       <div className="space-y-4">
         <Card>
           <ImportForm listId={listId} />
@@ -40,8 +42,12 @@ async function List({ params }: { params: PageProps<"/lists/[listId]">["params"]
             <SheetImportForm listId={listId} connectionId={sheet.row.id} label={sheet.row.label} />
           </Card>
         ))}
-        {prospects.length > 0 && (
-          <ul className="divide-y rounded-2xl border bg-card">
+        {prospects.length === 0 ? (
+          <EmptyState icon={Users} title="Personne sur cette liste pour le moment">
+            Importez un fichier ci-dessus, ou demandez à votre assistant de la remplir.
+          </EmptyState>
+        ) : (
+          <Rows>
             {prospects.map((found) => (
               <li key={found.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3 text-sm">
                 <span className="font-medium">{[found.firstName, found.lastName].filter(Boolean).join(" ")}</span>
@@ -49,7 +55,9 @@ async function List({ params }: { params: PageProps<"/lists/[listId]">["params"]
                   {found.role ? `${found.role}, ` : ""}
                   {found.company}
                 </span>
-                <span className="ml-auto shrink-0 font-mono text-[11px] text-muted-foreground">{STATE_NAMES[found.state] ?? found.state}</span>
+                <span className="ml-auto">
+                  <Tag warm={found.state === "replied"}>{STATE_NAMES[found.state] ?? found.state}</Tag>
+                </span>
                 {contacts.some((contact) => contact.personId === found.personId) && (
                   <p className="w-full truncate text-xs text-muted-foreground">
                     {contacts
@@ -73,7 +81,7 @@ async function List({ params }: { params: PageProps<"/lists/[listId]">["params"]
                 )}
               </li>
             ))}
-          </ul>
+          </Rows>
         )}
       </div>
     </>

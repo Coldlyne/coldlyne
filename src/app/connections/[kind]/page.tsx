@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { connectionsOf, connectorsOffered, type ConnectionView } from "@/application/connections";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { ConfirmButton, TryButton } from "@/components/try-button";
-import { Card, Code, PrimaryButton, StatusDot } from "@/components/ui";
+import { Card, CardTitle, Code, Eyebrow, PrimaryButton, QUIET_BUTTON, StatusDot } from "@/components/ui";
 import { CONNECTOR_SETUP } from "@/domain/connector-setup";
 import { CATEGORY_NAMES, CONNECTORS, connectorOf, type Capability, type Connector } from "@/domain/connectors";
 import { currentSeat } from "@/infrastructure/auth/session";
@@ -56,7 +56,7 @@ function Connection({ connection, connector }: { connection: ConnectionView; con
         {can("notify") && <TryButton action={bound(testAlertAction)} label="Envoyer une alerte de test" busy="Envoi…" />}
         {(can("read_replies") || can("meetings")) && <TryButton action={bound(readNowAction)} label="Lire maintenant" busy="Lecture…" />}
         {links.map((link) => (
-          <Link key={link.href} href={link.href} className="rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent">
+          <Link key={link.href} href={link.href} className={QUIET_BUTTON}>
             {link.label}
           </Link>
         ))}
@@ -114,14 +114,18 @@ async function Content({ params, searchParams }: Pick<PageProps<"/connections/[k
   if (!offered && mine.length === 0) notFound();
   return (
     <>
-      <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-        <Link href="/connections" className="hover:text-foreground">
-          {CATEGORY_NAMES[connector.category]}
-        </Link>
-      </p>
-      <div className="mt-3">
-        <PageHeading title={connector.name}>{connector.summary}</PageHeading>
-      </div>
+      <PageHeading
+        title={connector.name}
+        eyebrow={
+          <Eyebrow>
+            <Link href="/connections" className="hover:text-foreground">
+              {CATEGORY_NAMES[connector.category]}
+            </Link>
+          </Eyebrow>
+        }
+      >
+        {connector.summary}
+      </PageHeading>
       {typeof error === "string" && <p className="mb-6 text-sm text-ember">{error}</p>}
       <div className="space-y-4">
         {mine.map((connection) => (
@@ -129,7 +133,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/connections/[k
         ))}
         {offered && (connector.authorization.kind !== "inbound" || mine.length === 0) && (
         <Card>
-          <h2 className="mb-4 font-semibold tracking-[-0.02em]">{mine.length > 0 ? "Connecter un autre compte" : "Connecter"}</h2>
+          <CardTitle className="mb-4">{mine.length > 0 ? "Connecter un autre compte" : "Connecter"}</CardTitle>
           {setup && (
             <ol className="mb-5 list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
               {setup.map((step) => (

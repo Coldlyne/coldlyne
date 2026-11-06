@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { signalsOf } from "@/application/signals";
 import type { SignalType } from "@/application/ports";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
+import { EmptyState, Eyebrow, Rows } from "@/components/ui";
+import { Radio } from "lucide-react";
 
 export const metadata: Metadata = { title: "Retours" };
 
@@ -28,9 +31,9 @@ const when = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "
 async function Signals() {
   const seat = await currentSeat();
   const signals = await signalsOf(db(), seat.workspaceId, { limit: 200 });
-  if (signals.length === 0) return <p className="text-sm text-muted-foreground">Rien pour le moment. Les réponses, les rendez-vous et les inscriptions arriveront ici.</p>;
+  if (signals.length === 0) return <EmptyState icon={Radio} title="Rien pour le moment">Les réponses, les rendez-vous et les inscriptions arriveront ici.</EmptyState>;
   return (
-    <ul className="divide-y rounded-2xl border bg-card">
+    <Rows>
       {signals.map((signal, index) => (
         <li key={index} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3 text-sm">
           <span className="font-medium">{TYPE_NAMES[signal.type]}</span>
@@ -41,7 +44,7 @@ async function Signals() {
           {signal.detail && <p className="w-full text-muted-foreground">{signal.detail}</p>}
         </li>
       ))}
-    </ul>
+    </Rows>
   );
 }
 
@@ -49,7 +52,7 @@ async function Signals() {
 export default function SignalsPage() {
   return (
     <Shell>
-      <PageHeading title="Retours">Ce que vos prospects ont fait, sur tous les canaux. Une réponse, un refus ou un STOP arrête la séquence ; un STOP ou une adresse refusée va sur la liste d’exclusion.</PageHeading>
+      <PageHeading title="Retours" eyebrow={<Eyebrow><Link href="/replies" className="hover:text-foreground">Réponses</Link></Eyebrow>}>Ce que vos prospects ont fait, sur tous les canaux. Une réponse, un refus ou un STOP arrête la séquence ; un STOP ou une adresse refusée va sur la liste d’exclusion.</PageHeading>
       <Suspense fallback={<Loading />}>
         <Signals />
       </Suspense>

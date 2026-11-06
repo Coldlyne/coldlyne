@@ -5,11 +5,13 @@ import { Suspense } from "react";
 import { threadOf, type ThreadItem } from "@/application/threads";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { ActionForm, TryButton } from "@/components/try-button";
-import { Card, FIELD, Labelled } from "@/components/ui";
+import { Card, CardTitle, EmptyState, Eyebrow, FIELD, Labelled } from "@/components/ui";
 import { CHANNEL_NAMES, CHANNELS, INTEREST_NAMES, INTERESTS, type Channel } from "@/domain/sequences";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { consentAction, interestAction, noteReplyAction, replyAction } from "../actions";
+import { MessagesSquare } from "lucide-react";
+import { ChannelIcon } from "@/components/channel-icon";
 
 export const metadata: Metadata = { title: "Conversation" };
 
@@ -21,8 +23,9 @@ const OUTCOMES: Record<string, string> = { answered: "a décroché", no_answer: 
 function Item({ item }: { item: ThreadItem }) {
   const incoming = item.direction === "in";
   return (
-    <li className={`rounded-xl border p-4 text-sm ${incoming ? "bg-surface" : "bg-card sm:ml-10"}`}>
-      <p className="flex flex-wrap gap-x-3 font-mono text-[11px] text-muted-foreground">
+    <li className={`rounded-xl border p-4 text-sm ${incoming ? "border-ember/30 bg-ember/[0.06] sm:mr-10" : "bg-card sm:ml-10"}`}>
+      <p className="flex flex-wrap items-center gap-x-3 font-mono text-[11px] text-muted-foreground">
+        <ChannelIcon channel={item.channel as Channel} className={`size-3.5 ${incoming ? "text-ember" : "text-ice"}`} />
         <span>{CHANNEL_NAMES[item.channel as Channel] ?? item.channel}</span>
         <span>{when.format(item.at)}</span>
         <span className="ml-auto">{incoming ? (INCOMING[item.label ?? ""] ?? item.label) : item.outcome ? OUTCOMES[item.outcome] : "Envoyé"}</span>
@@ -40,22 +43,24 @@ async function Content({ params }: Pick<PageProps<"/replies/[prospectId]">, "par
   if (!thread) notFound();
   return (
     <>
-      <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-        <Link href="/replies" className="hover:text-foreground">
-          Réponses
-        </Link>{" "}
-        · {thread.list}
-      </p>
-      <div className="mt-3">
-        <PageHeading title={thread.person}>
-          {thread.role ? `${thread.role}, ` : ""}
-          {thread.company}
-        </PageHeading>
-      </div>
+      <PageHeading
+        title={thread.person}
+        eyebrow={
+          <Eyebrow>
+            <Link href="/replies" className="hover:text-foreground">
+              Réponses
+            </Link>{" "}
+            · {thread.list}
+          </Eyebrow>
+        }
+      >
+        {thread.role ? `${thread.role}, ` : ""}
+        {thread.company}
+      </PageHeading>
       <div className="space-y-4">
-        {thread.items.length === 0 ? <p className="text-sm text-muted-foreground">Rien d’échangé pour le moment.</p> : <ol className="space-y-3">{thread.items.map((item, index) => <Item key={index} item={item} />)}</ol>}
+        {thread.items.length === 0 ? <EmptyState icon={MessagesSquare} title="Rien d’échangé pour le moment" /> : <ol className="space-y-3">{thread.items.map((item, index) => <Item key={index} item={item} />)}</ol>}
         <Card>
-          <h2 className="font-semibold tracking-[-0.02em]">Ce que ça donne</h2>
+          <CardTitle>Ce que ça donne</CardTitle>
           <div className="mt-3">
             <ActionForm action={interestAction.bind(null, prospectId)} submit="Enregistrer" busy="…" quiet>
               <select name="interest" defaultValue={thread.interest ?? ""} aria-label="Ce que donne cette réponse" className={FIELD}>
@@ -70,7 +75,7 @@ async function Content({ params }: Pick<PageProps<"/replies/[prospectId]">, "par
           </div>
         </Card>
         <Card>
-          <h2 className="font-semibold tracking-[-0.02em]">Répondre par email</h2>
+          <CardTitle>Répondre par email</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">Depuis la même boîte, dans le même fil.</p>
           <div className="mt-3">
             <ActionForm action={replyAction.bind(null, prospectId)} submit="Envoyer" busy="Envoi…">
@@ -79,7 +84,7 @@ async function Content({ params }: Pick<PageProps<"/replies/[prospectId]">, "par
           </div>
         </Card>
         <Card>
-          <h2 className="font-semibold tracking-[-0.02em]">Noter une réponse reçue ailleurs</h2>
+          <CardTitle>Noter une réponse reçue ailleurs</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">Un message LinkedIn, un courrier auquel on a répondu par téléphone&nbsp;: cela arrête la séquence comme une autre réponse.</p>
           <div className="mt-3">
             <ActionForm action={noteReplyAction.bind(null, prospectId)} submit="Noter" busy="…" quiet>
@@ -99,7 +104,7 @@ async function Content({ params }: Pick<PageProps<"/replies/[prospectId]">, "par
           </div>
         </Card>
         <Card>
-          <h2 className="font-semibold tracking-[-0.02em]">WhatsApp</h2>
+          <CardTitle>WhatsApp</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">{thread.whatsappConsent ? "Cette personne a accepté les messages WhatsApp." : "Sans son accord, le WhatsApp part de votre compte, par vous : l’API ne lui écrit pas."}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <TryButton action={consentAction.bind(null, prospectId, !thread.whatsappConsent)} label={thread.whatsappConsent ? "Retirer son accord" : "Noter son accord"} busy="…" />

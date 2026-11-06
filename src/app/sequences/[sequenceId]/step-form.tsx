@@ -48,7 +48,7 @@ export function StepForm({ action, values = EMPTY, submit }: { action: (previous
         <textarea name="body" required rows={5} defaultValue={values.body} className={FIELD} />
       </Labelled>
       <details className="text-sm">
-        <summary className="cursor-pointer text-muted-foreground">WhatsApp et message vocal</summary>
+        <summary className="text-muted-foreground hover:text-foreground">WhatsApp et message vocal</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Labelled label="Modèle WhatsApp approuvé">
             <input name="template" defaultValue={values.options.template ?? ""} className={FIELD} />

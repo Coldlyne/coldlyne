@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { QuietButton } from "@/components/ui";
+import { INLINE_FIELD, QuietButton } from "@/components/ui";
 import { factsAction, type FactsState } from "../actions";
 
 /** What sources call what they know, in the member's words; anything else keeps its own name. */
@@ -28,7 +28,7 @@ export function CompanyLookup({ connectionId }: { connectionId: string }) {
   const [state, submit, pending] = useActionState<FactsState, FormData>(factsAction.bind(null, connectionId), null);
   return (
     <form action={submit} className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-      <input name="siren" required inputMode="numeric" placeholder="SIREN : 123 456 789" aria-label="SIREN" className="min-w-0 flex-1 rounded-lg border bg-surface px-3 py-2 outline-none focus:border-ring sm:max-w-56" />
+      <input name="siren" required inputMode="numeric" placeholder="SIREN : 123 456 789" aria-label="SIREN" className={`${INLINE_FIELD} min-w-0 flex-1 sm:max-w-56`} />
       <QuietButton type="submit" disabled={pending}>
         {pending ? "Recherche…" : "Chercher une entreprise"}
       </QuietButton>

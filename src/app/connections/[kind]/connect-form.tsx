@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { PrimaryButton } from "@/components/ui";
+import { INLINE_FIELD, PrimaryButton } from "@/components/ui";
 import type { Field } from "@/domain/connectors";
 import { connectAction, type ConnectState } from "../actions";
 
@@ -16,7 +16,7 @@ export function ConnectForm({ kind, fields }: { kind: string; fields: readonly F
             {field.label}
             {field.optional && <span className="text-muted-foreground"> (facultatif)</span>}
           </span>
-          <input name={field.key} type={field.secret ? "password" : "text"} autoComplete="off" required={!field.optional} placeholder={field.placeholder} className="rounded-lg border bg-surface px-3 py-2 font-mono text-xs outline-none focus:border-ring" />
+          <input name={field.key} type={field.secret ? "password" : "text"} autoComplete="off" required={!field.optional} placeholder={field.placeholder} className={`${INLINE_FIELD} font-mono sm:text-xs`} />
           {field.help && <span className="text-xs text-muted-foreground">{field.help}</span>}
         </label>
       ))}

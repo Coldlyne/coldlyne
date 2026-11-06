@@ -7,7 +7,7 @@ import { connectionsWith, type OpenedConnection } from "@/application/connection
 import type { Services } from "@/application/services";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { TryButton } from "@/components/try-button";
-import { Card, Code, PrimaryButton, StatusDot } from "@/components/ui";
+import { Card, Code, INLINE_FIELD, PrimaryButton, StatusDot } from "@/components/ui";
 import { hostnameOf, isDomainName, type DnsRecord, type MailboxProvider, type ReportPart } from "@/domain/deliverability";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { checkSendingDomain } from "@/infrastructure/dns/checks";
@@ -23,8 +23,6 @@ const PROVIDERS: { id: MailboxProvider; name: string }[] = [
   { id: "infomaniak", name: "Infomaniak" },
 ];
 
-const FIELD = "rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-ring";
-
 const REPUTATION_DAYS = 30;
 
 const percent = new Intl.NumberFormat("fr-FR", { style: "percent", maximumFractionDigits: 2 });
@@ -32,7 +30,7 @@ const percent = new Intl.NumberFormat("fr-FR", { style: "percent", maximumFracti
 function Part({ name, part }: { name: string; part: ReportPart }) {
   return (
     <Card>
-      <h3 className="flex items-center gap-2 font-semibold tracking-[-0.02em]">
+      <h3 className="flex items-center gap-2 font-medium tracking-[-0.02em]">
         <StatusDot status={part.ok ? "connected" : "failing"} />
         {name}
       </h3>
@@ -72,7 +70,7 @@ async function Reputation({ services, workspaceId, domain, opened }: { services:
   const read = await reputationOf(services, workspaceId, opened.row.id, domain, REPUTATION_DAYS);
   return (
     <Card>
-      <h3 className="font-semibold tracking-[-0.02em]">Taux de spam chez Gmail</h3>
+      <h3 className="font-medium tracking-[-0.02em]">Taux de spam chez Gmail</h3>
       {!read.ok && <p className="mt-2 text-sm text-ember">{read.error}</p>}
       {read.ok && read.days.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Google ne rapporte rien sur ce domaine : il ne le fait qu’à partir de 50 destinataires Gmail par jour.</p>}
       {read.ok && read.days.length > 0 && (
@@ -107,11 +105,11 @@ async function Content({ searchParams }: Pick<PageProps<"/deliverability">, "sea
         <Form action="/deliverability" className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-48 flex-1 flex-col gap-1.5 text-sm">
             Domaine d’envoi
-            <input name="domain" required defaultValue={domain} placeholder="acme.fr" autoComplete="off" className={FIELD} />
+            <input name="domain" required defaultValue={domain} placeholder="acme.fr" autoComplete="off" className={INLINE_FIELD} />
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
             Boîtes hébergées chez
-            <select name="provider" defaultValue={provider} className={FIELD}>
+            <select name="provider" defaultValue={provider} className={INLINE_FIELD}>
               {PROVIDERS.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name}
@@ -121,7 +119,7 @@ async function Content({ searchParams }: Pick<PageProps<"/deliverability">, "sea
           </label>
           <label className="flex min-w-48 flex-1 flex-col gap-1.5 text-sm">
             Sélecteurs DKIM (facultatif)
-            <input name="selectors" defaultValue={given} placeholder="s1, s2" autoComplete="off" className={FIELD} />
+            <input name="selectors" defaultValue={given} placeholder="s1, s2" autoComplete="off" className={INLINE_FIELD} />
           </label>
           <PrimaryButton type="submit">Vérifier</PrimaryButton>
         </Form>
@@ -138,7 +136,7 @@ async function Content({ searchParams }: Pick<PageProps<"/deliverability">, "sea
           </div>
           {check.fixes.length > 0 && (
             <Card>
-              <h3 className="font-semibold tracking-[-0.02em]">À publier sur {domain}</h3>
+              <h3 className="font-medium tracking-[-0.02em]">À publier sur {domain}</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {dns.length > 0 ? "Publier remplace l’enregistrement de même type et de même nom." : "Copiez-les chez votre hébergeur DNS, ou "}
                 {dns.length === 0 && (

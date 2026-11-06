@@ -8,13 +8,14 @@ import { listsOf } from "@/application/prospects";
 import { peopleOn, sequenceOf } from "@/application/sequences";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { ActionForm, ConfirmButton, TryButton } from "@/components/try-button";
-import { Card, FIELD, Labelled } from "@/components/ui";
+import { Card, CardTitle, Eyebrow, FIELD, Labelled } from "@/components/ui";
 import type { Capability } from "@/domain/connectors";
 import { CHANNEL_NAMES, CONDITION_NAMES, SEQUENCE_STATUS_NAMES, STOP_REASON_NAMES, type Channel } from "@/domain/sequences";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { appServices } from "@/infrastructure/services";
 import { addStepAction, approveAllAction, approveOneAction, editMessageAction, enrollListAction, launchAction, pauseAction, removePersonAction, removeStepAction, retryAction, saveSendingAction, updateStepAction } from "../actions";
 import { StepForm } from "./step-form";
+import { ChannelIcon } from "@/components/channel-icon";
 
 export const metadata: Metadata = { title: "Séquence" };
 
@@ -54,26 +55,31 @@ function reachedOf(found: Found, stepId: string): string {
 function Steps({ found }: { found: Found }) {
   return (
     <Card>
-      <h2 className="font-semibold tracking-[-0.02em]">Étapes</h2>
+      <CardTitle>Étapes</CardTitle>
       {found.steps.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Aucune étape pour le moment.</p>}
       <ol className="mt-4 space-y-4">
         {found.steps.map((step, index) => {
           const reached = reachedOf(found, step.id);
           return (
             <li key={step.id} className="rounded-xl border bg-surface p-4">
-              <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span aria-hidden className="font-serif text-2xl leading-none text-frost italic">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <ChannelIcon channel={step.channel as Channel} className="size-4 text-ice" />
                 <span className="font-medium">
-                  {index + 1}. {CHANNEL_NAMES[step.channel as Channel]}
+                  <span className="sr-only">{index + 1}. </span>
+                  {CHANNEL_NAMES[step.channel as Channel]}
                 </span>
                 <span className="text-muted-foreground">
                   {step.waitDays === 0 ? "aussitôt" : `après ${step.waitDays} j`} · {CONDITION_NAMES[step.condition].toLowerCase()}
                 </span>
-                {reached && <span className="ml-auto font-mono text-[11px] text-muted-foreground">{reached}</span>}
-              </p>
+                {reached && <span className="w-full font-mono text-[11px] text-muted-foreground sm:ml-auto sm:w-auto">{reached}</span>}
+              </div>
               {step.subject && <p className="mt-2 text-sm font-medium">{step.subject}</p>}
               <p className="mt-1 text-sm whitespace-pre-line text-muted-foreground">{step.body}</p>
               <details className="mt-3 text-sm">
-                <summary className="cursor-pointer text-muted-foreground">Modifier</summary>
+                <summary className="text-muted-foreground hover:text-foreground">Modifier</summary>
                 <div className="mt-3 space-y-3">
                   <StepForm action={updateStepAction.bind(null, found.id, step.id)} values={step} submit="Enregistrer" />
                   <div className="flex flex-wrap gap-2">
@@ -86,7 +92,7 @@ function Steps({ found }: { found: Found }) {
         })}
       </ol>
       <details className="mt-4 text-sm" open={found.steps.length === 0}>
-        <summary className="cursor-pointer font-medium">Ajouter une étape</summary>
+        <summary className="font-medium">Ajouter une étape</summary>
         <div className="mt-3">
           <StepForm action={addStepAction.bind(null, found.id)} submit="Ajouter" />
         </div>
@@ -111,7 +117,7 @@ function Message({ sequenceId, message }: { sequenceId: string; message: Message
       </div>
       {editable && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-muted-foreground">Corriger le texte</summary>
+          <summary className="text-muted-foreground hover:text-foreground">Corriger le texte</summary>
           <div className="mt-3">
             <ActionForm action={editMessageAction.bind(null, sequenceId, { enrollmentId: message.enrollmentId, stepId: message.stepId as string })} submit="Enregistrer" busy="…" quiet>
               <input name="subject" defaultValue={message.subject ?? ""} aria-label="Objet" placeholder="Objet" className={FIELD} />
@@ -131,7 +137,7 @@ function Queue({ found, waiting, failed }: { found: Found; waiting: MessageForRe
       {waiting.length > 0 && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <h2 className="flex-1 font-semibold tracking-[-0.02em]">À approuver ({waiting.length})</h2>
+            <CardTitle className="flex-1">À approuver ({waiting.length})</CardTitle>
             <TryButton action={approveAllAction.bind(null, found.id)} label="Tout approuver" busy="…" />
           </div>
           <ul className="mt-4 space-y-3">
@@ -143,7 +149,7 @@ function Queue({ found, waiting, failed }: { found: Found; waiting: MessageForRe
       )}
       {failed.length > 0 && (
         <>
-          <h2 className="mt-6 font-semibold tracking-[-0.02em] first:mt-0">À corriger ({failed.length})</h2>
+          <CardTitle className="mt-6  first:mt-0">À corriger ({failed.length})</CardTitle>
           <ul className="mt-4 space-y-3">
             {failed.map((message) => (
               <Message key={message.id} sequenceId={found.id} message={message} />
@@ -160,7 +166,7 @@ async function People({ workspaceId, found }: { workspaceId: string; found: Foun
   const [people, lists] = await Promise.all([peopleOn(services.db, workspaceId, found.id), listsOf(services.db, workspaceId)]);
   return (
     <Card>
-      <h2 className="font-semibold tracking-[-0.02em]">Personnes ({people.length})</h2>
+      <CardTitle>Personnes ({people.length})</CardTitle>
       <div className="mt-3">
         <ActionForm action={enrollListAction.bind(null, found.id)} submit="Ajouter cette liste" busy="Ajout…" quiet>
           <select name="listId" aria-label="Liste" defaultValue="" className={FIELD}>
@@ -224,7 +230,7 @@ function Sending({ found, views }: { found: Found; views: ConnectionView[] }) {
   const mailboxes = views.filter((view) => view.capabilities.includes("send_email"));
   return (
     <Card>
-      <h2 className="font-semibold tracking-[-0.02em]">Envoi</h2>
+      <CardTitle>Envoi</CardTitle>
       <p className="mt-1 text-sm text-muted-foreground">Les boîtes se partagent les personnes&nbsp;: chacune garde son fil avec la même boîte.</p>
       <div className="mt-4">
         <ActionForm action={saveSendingAction.bind(null, found.id)} submit="Enregistrer" busy="…" quiet className="flex flex-col gap-4">
@@ -294,15 +300,17 @@ async function Content({ params }: Pick<PageProps<"/sequences/[sequenceId]">, "p
   const [waiting, failed, views] = await Promise.all([messagesToReview(services.db, seat.workspaceId, "awaiting_approval", sequenceId), messagesToReview(services.db, seat.workspaceId, "failed", sequenceId), connectionsOf(services, seat.workspaceId)]);
   return (
     <>
-      <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-        <Link href="/sequences" className="hover:text-foreground">
-          Séquences
-        </Link>{" "}
-        · {SEQUENCE_STATUS_NAMES[found.status]}
-      </p>
-      <div className="mt-3">
-        <PageHeading title={found.name} />
-      </div>
+      <PageHeading
+        title={found.name}
+        eyebrow={
+          <Eyebrow>
+            <Link href="/sequences" className="hover:text-foreground">
+              Séquences
+            </Link>{" "}
+            · {SEQUENCE_STATUS_NAMES[found.status]}
+          </Eyebrow>
+        }
+      />
       <div className="space-y-4">
         <Actions found={found} />
         <Queue found={found} waiting={waiting} failed={failed} />

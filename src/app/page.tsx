@@ -5,24 +5,29 @@ import { messagesToReview } from "@/application/messages";
 import { tasksOf } from "@/application/tasks";
 import { conversationsOf } from "@/application/threads";
 import { Loading, PageHeading, Shell } from "@/components/shell";
-import { Card, Code, StatusDot } from "@/components/ui";
+import { Card, CardTitle, Code, EmptyState, StatusDot } from "@/components/ui";
 import { mcpResource } from "@/infrastructure/auth/server";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { env } from "@/infrastructure/env";
 import { appServices } from "@/infrastructure/services";
+import { ArrowRight, Mail } from "lucide-react";
 
 /** How each assistant adds a remote MCP server, in its own words. Their menus move: the address is what counts. */
 const ASSISTANTS = [
-  { name: "Claude", steps: "Réglages → Connecteurs → Ajouter un connecteur personnalisé, puis collez l’adresse." },
-  { name: "ChatGPT", steps: "Réglages → Applications et connecteurs → Paramètres avancés\u00a0: activez le mode développeur, créez un connecteur et collez l’adresse. Selon votre offre, il peut être réservé aux administrateurs ou limité." },
+  { name: "Claude", steps: "Personnaliser → Connecteurs → Ajouter un connecteur personnalisé, puis collez l’adresse." },
+  { name: "ChatGPT", steps: "Plugins → + → Ajouter un serveur MCP personnalisé, puis collez l’adresse. Selon votre offre, il peut être réservé aux administrateurs ou limité à la lecture." },
   { name: "Le Chat (Mistral)", steps: "Intelligence → Connecteurs → Ajouter un connecteur → MCP personnalisé, puis collez l’adresse. Il faut être administrateur." },
 ];
 
-function Figure({ href, count, label }: { href: string; count: number; label: string }) {
+/** A count that leads somewhere. Replies waiting are the page's one warm point: they're what all this is for. */
+function Figure({ href, count, label, warm = false }: { href: string; count: number; label: string; warm?: boolean }) {
   return (
-    <Link href={href} className="card-sheen rounded-2xl border bg-card p-5 transition-colors hover:border-foreground/20">
-      <p className="text-3xl font-semibold tracking-[-0.04em]">{count}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{label}</p>
+    <Link href={href} className="group card-premium rounded-2xl p-5 outline-none transition-colors hover:bg-accent/30 focus-visible:ring-3 focus-visible:ring-ring/50">
+      <p className={`text-4xl font-medium tracking-[-0.045em] ${warm && count > 0 ? "text-ember" : "text-display"}`}>{count}</p>
+      <p className="mt-1.5 flex items-center justify-between gap-2 text-sm text-muted-foreground">
+        {label}
+        <ArrowRight aria-hidden className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
+      </p>
     </Link>
   );
 }
@@ -39,12 +44,12 @@ async function Home() {
       <PageHeading title={seat.workspaceName}>Prospectez en demandant à votre assistant : il cherche, rédige, envoie et suit les réponses. Vous fixez les limites, Coldlyne les tient.</PageHeading>
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <Figure href="/today" count={tasks.length} label="à faire aujourd’hui" />
-        <Figure href="/sequences" count={approvals.length + failed.length} label="messages à approuver ou corriger" />
-        <Figure href="/replies" count={unread} label="réponses à lire" />
+        <Figure href="/sequences" count={approvals.length + failed.length} label={approvals.length + failed.length > 1 ? "messages à approuver ou corriger" : "message à approuver ou corriger"} />
+        <Figure href="/replies" count={unread} label={unread > 1 ? "réponses à lire" : "réponse à lire"} warm />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <h2 className="font-semibold tracking-[-0.02em]">Connectez votre assistant</h2>
+          <CardTitle>Connectez votre assistant</CardTitle>
           <p className="mt-2 text-sm text-muted-foreground">L’adresse du serveur MCP de Coldlyne :</p>
           <div className="mt-3">
             <Code>{address}</Code>
@@ -63,13 +68,17 @@ async function Home() {
         </Card>
         <Card>
           <div className="flex items-baseline justify-between gap-4">
-            <h2 className="font-semibold tracking-[-0.02em]">Vos connexions</h2>
+            <CardTitle>Vos connexions</CardTitle>
             <Link href="/connections" className="text-sm text-link hover:underline">
               Tout voir
             </Link>
           </div>
           {connections.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">Rien encore. Commencez par une boîte mail : c’est elle qui envoie.</p>
+            <div className="mt-4">
+              <EmptyState icon={Mail} title="Aucune connexion pour le moment">
+                Commencez par une boîte mail : c’est elle qui envoie.
+              </EmptyState>
+            </div>
           ) : (
             <ul className="mt-4 space-y-2.5 text-sm">
               {connections.map((connection) => (

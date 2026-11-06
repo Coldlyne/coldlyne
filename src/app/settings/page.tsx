@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { memberPhoneOf, settingsOf } from "@/application/workspace-settings";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { ActionForm } from "@/components/try-button";
-import { Card, FIELD, Labelled } from "@/components/ui";
+import { Card, CardTitle, FIELD, Labelled } from "@/components/ui";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { saveBriefAction, savePhoneAction, saveSendingAction } from "./actions";
@@ -19,17 +19,17 @@ async function Content() {
   return (
     <div className="space-y-4">
       <Card>
-        <h2 className="font-semibold tracking-[-0.02em]">Comment vous envoyez</h2>
+        <CardTitle>Comment vous envoyez</CardTitle>
         <p className="mt-1 text-sm text-muted-foreground">Seul un membre change ces réglages, ici&nbsp;: aucun assistant ne peut les assouplir.</p>
         <div className="mt-4">
           <ActionForm action={saveSendingAction} submit="Enregistrer" busy="…" className="flex flex-col gap-4">
             <fieldset className="space-y-2 text-sm">
-              <legend>Qui décide d’envoyer</legend>
-              <label className="flex items-start gap-2">
+              <legend className="mb-2">Qui décide d’envoyer</legend>
+              <label className="flex items-start gap-2.5 rounded-xl border p-3 transition-colors has-[:checked]:border-ice/40 has-[:checked]:bg-ice/[0.06]">
                 <input type="radio" name="approval" value="autonomous" defaultChecked={settings.approval === "autonomous"} className="mt-1" />
                 <span>L’assistant envoie seul sur les canaux qui passent par une API, une fois la séquence lancée.</span>
               </label>
-              <label className="flex items-start gap-2">
+              <label className="flex items-start gap-2.5 rounded-xl border p-3 transition-colors has-[:checked]:border-ice/40 has-[:checked]:bg-ice/[0.06]">
                 <input type="radio" name="approval" value="approve_first" defaultChecked={settings.approval === "approve_first"} className="mt-1" />
                 <span>Un membre approuve chaque lancement et chaque message avant qu’il parte.</span>
               </label>
@@ -49,7 +49,7 @@ async function Content() {
         </div>
       </Card>
       <Card>
-        <h2 className="font-semibold tracking-[-0.02em]">Ce que vos assistants savent de vous</h2>
+        <CardTitle>Ce que vos assistants savent de vous</CardTitle>
         <p className="mt-1 text-sm text-muted-foreground">Claude et ChatGPT le lisent au début de chaque conversation, et l’enrichissent quand vous le leur demandez.</p>
         <div className="mt-4">
           <ActionForm action={saveBriefAction} submit="Enregistrer" busy="…" quiet>
@@ -72,7 +72,7 @@ async function Content() {
         </div>
       </Card>
       <Card>
-        <h2 className="font-semibold tracking-[-0.02em]">Votre numéro</h2>
+        <CardTitle>Votre numéro</CardTitle>
         <p className="mt-1 text-sm text-muted-foreground">Quand vous appelez depuis Coldlyne, votre téléphone sonne d’abord, puis celui du prospect.</p>
         <div className="mt-4">
           <ActionForm action={savePhoneAction} submit="Enregistrer" busy="…" quiet>

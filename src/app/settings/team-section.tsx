@@ -1,7 +1,7 @@
 import { openInvitationsOf } from "@/application/invitations";
 import { teamOf } from "@/application/team";
 import { ActionForm, ConfirmButton } from "@/components/try-button";
-import { Card, INLINE_FIELD } from "@/components/ui";
+import { Card, CardTitle, INLINE_FIELD } from "@/components/ui";
 import { managesTeam, refusalToChangeRole, refusalToLeave, refusalToRemove, ROLE_NAMES, ROLES, type Teammate } from "@/domain/team";
 import type { Seat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
@@ -77,7 +77,7 @@ export async function TeamSection({ seat }: { seat: Seat }) {
   const lastOwner = refusalToLeave(team, seat.userId);
   return (
     <Card>
-      <h2 className="font-semibold tracking-[-0.02em]">Équipe</h2>
+      <CardTitle>Équipe</CardTitle>
       <p className="mt-1 text-sm text-muted-foreground">Qui travaille dans {seat.workspaceName}. Seule une personne donne un accès, ici&nbsp;: aucun assistant ne peut inviter ni retirer quelqu’un.</p>
       <ul className="mt-3 divide-y">
         {people.map((person) => (

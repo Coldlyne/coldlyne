@@ -5,10 +5,11 @@ import { listsOf } from "@/application/prospects";
 import { watchlistsOf } from "@/application/watchlists";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { ActionForm, ConfirmButton, TryButton } from "@/components/try-button";
-import { Card, FIELD, Labelled } from "@/components/ui";
+import { Card, CardTitle, EmptyState, FIELD, Labelled } from "@/components/ui";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { createWatchlistAction, deleteWatchlistAction, runWatchlistAction } from "./actions";
+import { Radar } from "lucide-react";
 
 export const metadata: Metadata = { title: "Veilles" };
 
@@ -26,6 +27,11 @@ async function Content() {
   const [watchlists, lists] = await Promise.all([watchlistsOf(db(), seat.workspaceId), listsOf(db(), seat.workspaceId)]);
   return (
     <div className="space-y-4">
+      {watchlists.length === 0 && (
+        <EmptyState icon={Radar} title="Aucune veille pour le moment">
+          Créez-en une ci-dessous : les nouvelles sociétés et les nouveaux dirigeants qui correspondent arriveront sur une liste.
+        </EmptyState>
+      )}
       {watchlists.length > 0 && (
         <ul className="space-y-3">
           {watchlists.map((watch) => (
@@ -49,7 +55,7 @@ async function Content() {
         </ul>
       )}
       <Card>
-        <h2 className="font-semibold tracking-[-0.02em]">Nouvelle veille</h2>
+        <CardTitle>Nouvelle veille</CardTitle>
         <div className="mt-4">
           <ActionForm action={createWatchlistAction} submit="Créer la veille" busy="…" className="flex flex-col gap-4">
             <Labelled label="Nom">

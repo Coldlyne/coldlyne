@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { unsubscribeSubject } from "@/application/unsubscribe";
-import { Logo } from "@/components/logo";
+import { AuthFrame } from "@/components/auth-frame";
 import { PrimaryButton } from "@/components/ui";
 import { appServices } from "@/infrastructure/services";
 import { confirmUnsubscribe } from "./actions";
@@ -32,11 +32,10 @@ async function Content({ params, searchParams }: Pick<PageProps<"/u/[token]">, "
 /** The way out every message carries: no account needed. */
 export default function UnsubscribePage({ params, searchParams }: PageProps<"/u/[token]">) {
   return (
-    <main className="relative isolate flex flex-1 flex-col items-center justify-center px-4 py-16">
-      <Logo id="unsubscribe" />
+    <AuthFrame id="unsubscribe" horizon={false}>
       <Suspense>
         <Content params={params} searchParams={searchParams} />
       </Suspense>
-    </main>
+    </AuthFrame>
   );
 }

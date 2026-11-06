@@ -3,9 +3,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { workspacesOf, type MemberWorkspace } from "@/application/workspaces";
-import { Logo } from "@/components/logo";
+import { AuthCard, AuthFrame, AuthTitle } from "@/components/auth-frame";
 import { Loading } from "@/components/shell";
-import { Card } from "@/components/ui";
 import { listInFrench } from "@/domain/words";
 import { auth } from "@/infrastructure/auth/server";
 import { currentMember } from "@/infrastructure/auth/session";
@@ -31,8 +30,8 @@ async function Request({ searchParams }: { searchParams: PageProps<"/consent">["
   const { client_id: clientId } = query;
   const client = typeof clientId === "string" ? await auth().api.getOAuthClientPublic({ query: { client_id: clientId }, headers: await headers() }).catch(() => null) : null;
   return (
-    <Card className="mt-8 w-full max-w-md">
-      <h1 className="text-xl font-semibold tracking-[-0.03em]">{client?.client_name ?? "Un assistant"} demande à accéder à Coldlyne</h1>
+    <AuthCard>
+      <AuthTitle>{client?.client_name ?? "Un assistant"} demande à accéder à Coldlyne</AuthTitle>
       {client?.client_uri && <p className="mt-1 font-mono text-xs text-muted-foreground">{client.client_uri}</p>}
       <p className="mt-4 text-sm text-muted-foreground">
         Il pourra agir en votre nom {workspaces.length > 1 ? `dans tous vos espaces, ${listInFrench(workspaces.map(({ name }) => name))}` : "dans votre espace"} : chercher des entreprises, préparer et envoyer vos campagnes dans les limites de l’espace, lire les réponses. Les plafonds, la liste d’exclusion et les mentions légales s’appliquent toujours à lui.
@@ -41,19 +40,17 @@ async function Request({ searchParams }: { searchParams: PageProps<"/consent">["
       <div className="mt-6">
         <ConsentButtons />
       </div>
-    </Card>
+    </AuthCard>
   );
 }
 
 /** Where a member approves or refuses an assistant. */
 export default function ConsentPage({ searchParams }: PageProps<"/consent">) {
   return (
-    <main className="relative isolate flex flex-1 flex-col items-center justify-center px-4 py-16">
-      <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-96 bg-glow" />
-      <Logo id="consent" />
+    <AuthFrame id="consent">
       <Suspense fallback={<Loading />}>
         <Request searchParams={searchParams} />
       </Suspense>
-    </main>
+    </AuthFrame>
   );
 }
