@@ -89,6 +89,20 @@
     @apply bg-background text-foreground;
     overflow-wrap: break-word;
   }
+  /* The app is dark only: native pickers, scrollbars and lists must follow. */
+  html {
+    color-scheme: dark;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--brand-300);
+  }
+  summary {
+    cursor: pointer;
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 20%, transparent);
+  }
   html {
     @apply font-sans;
     font-feature-settings: var(--font-features);
@@ -112,6 +126,52 @@
     color-mix(in oklab, var(--ice) 14%, transparent),
     transparent
   );
+}
+/* A narrow beam from above, like a spotlight on the page's opening. */
+@utility bg-spotlight {
+  background-image:
+    radial-gradient(ellipse 34% 46% at 50% -6%, color-mix(in oklab, var(--ice) 22%, transparent), transparent 70%),
+    radial-gradient(ellipse 70% 60% at 50% -20%, color-mix(in oklab, var(--ice) 8%, transparent), transparent 70%);
+}
+/* The identity's one motif, shared with the website: a line of light that leaves ice and arrives ember. */
+@utility bg-line {
+  background-image: linear-gradient(90deg, transparent 0%, var(--brand-400) 18%, var(--brand-300) 55%, var(--ember-400) 100%);
+}
+@utility glow-line {
+  box-shadow: 0 0 24px 2px color-mix(in oklab, var(--ice) 35%, transparent);
+}
+/* Headings lit from above: full ink at the top, softer at the base. */
+@utility text-display {
+  background-image: linear-gradient(180deg, var(--foreground) 35%, color-mix(in oklab, var(--foreground) 64%, transparent));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+/* A pane of glass around what matters on a page: a translucent bezel, a hairline, a long shadow. */
+@utility glass-frame {
+  border-radius: 1.5rem;
+  padding: 0.5rem;
+  background: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--foreground) 9%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, var(--foreground) 14%, transparent),
+    0 50px 120px -40px rgb(2 4 10 / 0.55);
+  backdrop-filter: blur(12px);
+}
+/* The light travelling along the line; still for those who prefer less motion. */
+@keyframes travel {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+@utility animate-travel {
+  animation: travel 2.4s cubic-bezier(0.5, 0, 0.3, 1) infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
 }
 /* The few words of a heading that carry the idea, in frost. */
 @utility text-frost {
@@ -144,4 +204,15 @@ body::after {
 }
 .dark body::after {
   opacity: 0.045;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 
@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   description: "Votre prospection depuis Claude ou ChatGPT.",
   robots: { index: false },
 };
+
+/** The browser's own bar in the app's midnight, which is dark only. */
+export const viewport: Viewport = { themeColor: "#030408", colorScheme: "dark" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
