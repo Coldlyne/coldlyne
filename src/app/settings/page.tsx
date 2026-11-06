@@ -8,6 +8,7 @@ import { Card, CardTitle, FIELD, Labelled } from "@/components/ui";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { saveBriefAction, savePhoneAction, saveSendingAction } from "./actions";
+import { GroupSection } from "./group-section";
 import { TeamSection } from "./team-section";
 
 export const metadata: Metadata = { title: "Réglages" };
@@ -80,6 +81,7 @@ async function Content() {
           </ActionForm>
         </div>
       </Card>
+      <GroupSection seat={seat} />
       <TeamSection seat={seat} />
       <p className="text-sm text-muted-foreground">
         Pour relier une autre application&nbsp;:{" "}

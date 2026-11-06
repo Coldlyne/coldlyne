@@ -118,7 +118,7 @@ export const sequenceTools: ToolRegistrar = (server, context) => {
     "enroll_prospects",
     {
       title: "Put prospects on a sequence",
-      description: "By list or by prospect. Left out, each with why: a company that refused commercial use of its data, anyone on the suppression list or who already answered, and anyone already on a running sequence.",
+      description: "By list or by prospect. Left out, each with why: a company that refused commercial use of its data, anyone on the suppression list or who already answered, and anyone already on a running sequence. `elsewhere` names anyone added whom another workspace of the group wrote to or who opted out of it, with when: tell the member, who decides.",
       inputSchema: z.object({ sequenceId: z.uuid(), listId: z.uuid().optional(), prospectIds: z.array(z.uuid()).optional() }),
     },
     async ({ sequenceId, listId, prospectIds }) => {

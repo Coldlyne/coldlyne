@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { Tried } from "@/application/connection-use";
+import { renameGroup } from "@/application/groups";
 import { saveMemberPhone, saveSettings } from "@/application/workspace-settings";
 import { DEFAULT_DAILY_CAP } from "@/domain/sequences";
 import { currentSeat } from "@/infrastructure/auth/session";
@@ -33,4 +34,12 @@ export async function savePhoneAction(_previous: Tried | null, form: FormData): 
   await saveMemberPhone(appServices().db, seat.workspaceId, seat.userId, phone || null);
   revalidatePath("/settings");
   return { ok: true, said: "Enregistré." };
+}
+
+/** Renames the group this workspace is in: for whoever owns a workspace of it. */
+export async function renameGroupAction(_previous: Tried | null, form: FormData): Promise<Tried> {
+  const seat = await currentSeat();
+  const renamed = await renameGroup(appServices().db, seat.workspaceId, seat.userId, String(form.get("name") ?? ""));
+  revalidatePath("/", "layout");
+  return renamed;
 }

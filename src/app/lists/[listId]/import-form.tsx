@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { INLINE_FIELD, PrimaryButton } from "@/components/ui";
+import { elsewhereWithName } from "@/domain/directory";
 import { importCsvAction, importSheetAction, type ImportState } from "../actions";
 
 /** What came of an import: what was added, and each row left out with why. */
@@ -23,6 +24,11 @@ function ImportReport({ state }: { state: ImportState }) {
               ))}
             </ul>
           )}
+          {state.result.elsewhere?.map((note) => (
+            <p key={`${note.personId}-${note.workspace}`} className="mt-2 text-ember">
+              {elsewhereWithName(note)}
+            </p>
+          ))}
         </div>
       )}
     </>

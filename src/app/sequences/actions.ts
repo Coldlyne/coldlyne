@@ -9,6 +9,7 @@ import { prospectsOf } from "@/application/prospects";
 import { tickWorkspace } from "@/application/scheduler";
 import { addStep, createSequence, launchSequence, removeStep, setPaused, updateSequence, updateStep, type StepInput } from "@/application/sequences";
 import { settingsOf } from "@/application/workspace-settings";
+import { elsewhereWithName } from "@/domain/directory";
 import { CHANNELS, STEP_CONDITIONS, type Channel, type SendingWindow, type StepCondition } from "@/domain/sequences";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { appServices } from "@/infrastructure/services";
@@ -85,7 +86,7 @@ export async function enrollListAction(sequenceId: string, _previous: Tried | nu
   const result = await enroll(services.db, seat.workspaceId, sequenceId, prospects.map((found) => found.id), services.now());
   revalidatePath(pathOf(sequenceId));
   if (!result) return { ok: false, error: "Cette séquence n’existe pas." };
-  const left = result.skipped.map((found) => `${found.name} : ${found.why}`).join("\n");
+  const left = [...result.skipped.map((found) => `${found.name} : ${found.why}`), ...(result.elsewhere ?? []).map(elsewhereWithName)].join("\n");
   return { ok: true, said: `${result.enrolled} ${result.enrolled > 1 ? "personnes ajoutées" : "personne ajoutée"}.${left ? `\n${left}` : ""}` };
 }
 

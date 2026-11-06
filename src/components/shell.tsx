@@ -13,8 +13,8 @@ async function WorkspaceSwitcher({ member }: { member: Member }) {
   const { workspaces, active } = await workspacesInBrowser(member.userId);
   const mayStart = mayStartWorkspace(member.email, env());
   if (!active || (workspaces.length === 1 && !mayStart)) return null;
-  const others = workspaces.filter(({ id }) => id !== active.id).map(({ id, name }) => ({ id, name }));
-  return <WorkspaceMenu current={active.name} others={others} mayStart={mayStart} />;
+  const others = workspaces.filter(({ id }) => id !== active.id).map(({ id, name, group }) => ({ id, name, group }));
+  return <WorkspaceMenu current={active.name} group={active.group} others={others} mayStart={mayStart} />;
 }
 
 /** Who is signed in and where, streamed in once the session is read. */

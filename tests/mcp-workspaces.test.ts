@@ -109,8 +109,8 @@ describe("an assistant, for a member with several workspaces", () => {
     expect(tools.find(({ name }: { name: string }) => name === "list_workspaces").annotations.readOnlyHint).toBe(true);
     const { structuredContent } = await tool("list_workspaces");
     expect(structuredContent.workspaces).toEqual([
-      { id: acme, name: "Acme", role: "owner" },
-      { id: northwind, name: "Northwind", role: "owner" },
+      { id: acme, name: "Acme", role: "owner", group: "Acme" },
+      { id: northwind, name: "Northwind", role: "owner", group: "Northwind" },
     ]);
   });
 
@@ -191,7 +191,7 @@ describe("an assistant, for a member with several workspaces", () => {
     expect(refused.isError).toBe(true);
     expect(refused.content[0].text).toContain('"Acme"');
     expect(refused.content[0].text).not.toContain("Northwind");
-    expect((await tool("list_workspaces")).structuredContent.workspaces).toEqual([{ id: acme, name: "Acme", role: "owner" }]);
+    expect((await tool("list_workspaces")).structuredContent.workspaces).toEqual([{ id: acme, name: "Acme", role: "owner", group: "Acme" }]);
   });
 });
 
@@ -228,7 +228,7 @@ describe("an assistant, for a member with one workspace", () => {
 
   it("still lists their workspace", async () => {
     const { workspaceId } = await memberOfOne();
-    expect((await tool("list_workspaces")).structuredContent.workspaces).toEqual([{ id: workspaceId, name: "Solo", role: "owner" }]);
+    expect((await tool("list_workspaces")).structuredContent.workspaces).toEqual([{ id: workspaceId, name: "Solo", role: "owner", group: "Solo" }]);
   });
 
   it("accepts its own workspace named, but refuses another rather than quietly using theirs", async () => {

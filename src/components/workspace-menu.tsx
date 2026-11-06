@@ -7,8 +7,8 @@ import { switchWorkspaceAction } from "./workspace-actions";
 
 const ENTRY = "block w-full truncate rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent";
 
-/** The workspace this is, and a menu of the member's others, plus starting a new one for those who may. */
-export function WorkspaceMenu({ current, others, mayStart }: { current: string; others: { id: string; name: string }[]; mayStart: boolean }) {
+/** The workspace this is and its group, and a menu of the member's others, plus starting a new one for those who may. */
+export function WorkspaceMenu({ current, group, others, mayStart }: { current: string; group: string; others: { id: string; name: string; group: string }[]; mayStart: boolean }) {
   const menu = useRef<HTMLDetailsElement>(null);
   const close = () => menu.current?.removeAttribute("open");
   useEffect(() => {
@@ -25,10 +25,12 @@ export function WorkspaceMenu({ current, others, mayStart }: { current: string; 
         <ChevronDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </summary>
       <div className="absolute right-0 z-50 mt-2 w-60 rounded-xl border bg-popover p-1 shadow-lg" onClick={close}>
+        <p className="truncate px-3 py-2 text-xs text-muted-foreground">Groupe {group}</p>
         {others.map((workspace) => (
           <form key={workspace.id} action={switchWorkspaceAction.bind(null, workspace.id)}>
             <button type="submit" className={ENTRY}>
               {workspace.name}
+              {workspace.group !== group && <span className="block truncate text-xs text-muted-foreground">Groupe {workspace.group}</span>}
             </button>
           </form>
         ))}

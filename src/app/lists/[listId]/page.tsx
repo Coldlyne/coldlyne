@@ -3,15 +3,18 @@ import Link from "next/link";
 import { Fragment, Suspense } from "react";
 import { connectionsWith } from "@/application/connections";
 import { contactsOf, pushesOf } from "@/application/contacts";
+import { elsewhereOf } from "@/application/directory";
 import { listsOf, prospectsOf } from "@/application/prospects";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { TryButton } from "@/components/try-button";
 import { Card, EmptyState, Eyebrow, Rows, Tag } from "@/components/ui";
+import { elsewhereInWords } from "@/domain/directory";
 import { notFound } from "next/navigation";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { appServices } from "@/infrastructure/services";
 import { pushToCrmAction } from "../actions";
+import { CompanySearch } from "./company-search";
 import { ImportForm, SheetImportForm } from "./import-form";
 import { Users } from "lucide-react";
 
@@ -28,12 +31,16 @@ async function List({ params }: { params: PageProps<"/lists/[listId]">["params"]
   if (!list) notFound();
   const prospects = await prospectsOf(db(), seat.workspaceId, listId);
   const contacts = await contactsOf(db(), seat.workspaceId, prospects.map((found) => found.personId));
+  const elsewhere = await elsewhereOf(db(), seat.workspaceId, prospects.map((found) => found.personId));
   const services = appServices();
   const [crms, sheets, pushes] = await Promise.all([connectionsWith(services, seat.workspaceId, "push_contacts"), connectionsWith(services, seat.workspaceId, "read_sheet"), pushesOf(db(), seat.workspaceId, prospects.map((found) => found.id))]);
   return (
     <>
       <PageHeading title={list.name} eyebrow={<Eyebrow><Link href="/lists" className="hover:text-foreground">Listes</Link></Eyebrow>} />
       <div className="space-y-4">
+        <Card>
+          <CompanySearch listId={listId} />
+        </Card>
         <Card>
           <ImportForm listId={listId} />
         </Card>
@@ -44,7 +51,7 @@ async function List({ params }: { params: PageProps<"/lists/[listId]">["params"]
         ))}
         {prospects.length === 0 ? (
           <EmptyState icon={Users} title="Personne sur cette liste pour le moment">
-            Importez un fichier ci-dessus, ou demandez à votre assistant de la remplir.
+            Cherchez une entreprise ou importez un fichier ci-dessus, ou demandez à votre assistant de la remplir.
           </EmptyState>
         ) : (
           <Rows>
@@ -66,6 +73,13 @@ async function List({ params }: { params: PageProps<"/lists/[listId]">["params"]
                       .join(" · ")}
                   </p>
                 )}
+                {elsewhere
+                  .filter((note) => note.personId === found.personId)
+                  .map((note) => (
+                    <p key={note.workspace} className="w-full text-xs text-ember">
+                      {elsewhereInWords(note)}
+                    </p>
+                  ))}
                 {crms.length > 0 && (
                   <div className="flex w-full flex-wrap items-center gap-2 pt-1">
                     {crms.map((crm) => {
