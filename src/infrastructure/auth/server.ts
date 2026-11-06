@@ -19,6 +19,14 @@ export const mcpResource = (settings: Pick<Env, "BETTER_AUTH_URL">) => new URL("
 const PASSWORD_SIGN_UP = "/sign-up/email";
 
 /**
+ * How long, in seconds, a refresh token just replaced still gets the same answer. An assistant can lose
+ * that answer, when its token store fails a write, and present the old token again. With no grace that
+ * reads as a stolen token: the connection's tokens are all deleted and the member has to approve it
+ * again. Any later than this, it still does.
+ */
+const REFRESH_TOKEN_GRACE = 60;
+
+/**
  * Members sign in with the company's identity provider when the instance has one, otherwise with
  * Google or a password as the instance allows; while Coldlyne is private, only the instance's admins
  * and people with an invitation still good may create an account. Coldlyne is also an OAuth server for assistants: Claude, ChatGPT or any MCP
@@ -75,6 +83,7 @@ export function createAuth(database: Database, settings: Env) {
         scopes: ["openid", "profile", "email", "offline_access"],
         resources: [mcpResource(settings)],
         clientRegistrationDefaultResources: [mcpResource(settings)],
+        refreshTokenReuseInterval: REFRESH_TOKEN_GRACE,
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         clientRegistrationDefaultApplicationType: "infer",
