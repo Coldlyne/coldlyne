@@ -40,6 +40,17 @@ export function dedupedFindings(findings: readonly ContactFinding[]): ContactFin
   return [...byDetail.values()];
 }
 
+/** A detail a workspace brought from its own file and that a page also shows is one detail: it keeps the page, which says where it comes from. */
+export function onePerDetail<T extends { personId?: string; kind: string; value: string; page: string | null }>(details: readonly T[]): T[] {
+  const byDetail = new Map<string, T>();
+  for (const detail of details) {
+    const key = `${detail.personId ?? ""}:${detail.kind}:${detail.value}`;
+    const known = byDetail.get(key);
+    if (!known || (!known.page && detail.page)) byDetail.set(key, detail);
+  }
+  return [...byDetail.values()];
+}
+
 /** The words of a page, spaced at element boundaries: two adjacent spans must not read as one word. */
 function textOf(node: Node): string {
   if (node instanceof HTMLElement) return node.childNodes.map(textOf).join(" ");

@@ -1,12 +1,14 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { contactKindOf, type Channel, type StepOutcome } from "@/domain/sequences";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { addressToUse, contactKindOf, type Channel, type OffLimits, type StepOutcome } from "@/domain/sequences";
 import type { Database } from "@/infrastructure/db/client";
+import { outreach } from "@/infrastructure/db/schema/connections";
 import { company, contactDetail, person, prospect } from "@/infrastructure/db/schema/prospects";
 import { enrollment, sequence, sequenceStep, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import { openConnection } from "./connections";
 import type { Tried } from "./connection-use";
-import { advance } from "./enrollments";
+import { ownDetailsFirst } from "./directory";
+import { advance, suppressedIn } from "./enrollments";
 import type { Services } from "./services";
 import { recordOutreach, recordSignals } from "./signals";
 import { memberPhoneOf } from "./workspace-settings";
@@ -49,6 +51,7 @@ export async function tasksOf(db: Database, workspaceId: string, userId: string,
         callId: stepMessage.externalId,
         sequence: sequence.name,
         sequenceId: sequence.id,
+        enrollmentId: enrollment.id,
         personId: person.id,
         person: sql<string>`trim(coalesce(${person.firstName}, '') || ' ' || ${person.lastName})`,
         role: person.role,
@@ -65,14 +68,25 @@ export async function tasksOf(db: Database, workspaceId: string, userId: string,
       .where(and(eq(stepMessage.status, "to_do"), everyone ? undefined : eq(stepMessage.assignedTo, userId)))
       .orderBy(asc(stepMessage.createdAt))
       .limit(200);
-    const contacts = rows.length ? await tx.select({ personId: contactDetail.personId, kind: contactDetail.kind, value: contactDetail.value }).from(contactDetail).where(inArray(contactDetail.personId, rows.map((row) => row.personId))) : [];
-    return rows.map(({ personId, options, ...row }) => ({
+    const addressOn = await addressesFor(tx, rows);
+    return rows.map(({ personId, enrollmentId, options, ...row }) => ({
       ...row,
       channel: row.channel as Channel,
-      address: contacts.find((contact) => contact.personId === personId && contact.kind === contactKindOf(row.channel as Channel))?.value ?? null,
+      address: addressOn({ personId, enrollmentId }, row.channel as Channel),
       recordingUrl: options?.recordingUrl ?? null,
     }));
   });
+}
+
+/** Where to do these tasks: the same address sending would choose, read once for all of them. */
+async function addressesFor(tx: Database, tasks: readonly { personId: string; enrollmentId: string }[]) {
+  const details = tasks.length ? await tx.select({ personId: contactDetail.personId, kind: contactDetail.kind, value: contactDetail.value }).from(contactDetail).where(inArray(contactDetail.personId, tasks.map(({ personId }) => personId))).orderBy(...ownDetailsFirst) : [];
+  const written = tasks.length ? await tx.select({ enrollmentId: outreach.enrollmentId, address: outreach.address }).from(outreach).where(inArray(outreach.enrollmentId, tasks.map(({ enrollmentId }) => enrollmentId))).orderBy(desc(outreach.sentAt)) : [];
+  const offLimits: OffLimits = await suppressedIn(tx);
+  return ({ personId, enrollmentId }: { personId: string; enrollmentId: string }, channel: Channel) => {
+    const used = written.filter((row) => row.enrollmentId === enrollmentId).map(({ address }) => address);
+    return addressToUse(details.filter((detail) => detail.personId === personId), contactKindOf(channel), used, offLimits).address?.value ?? null;
+  };
 }
 
 async function taskRow(db: Database, workspaceId: string, messageId: string) {
@@ -88,16 +102,8 @@ async function taskRow(db: Database, workspaceId: string, messageId: string) {
   return row;
 }
 
-async function addressOf(db: Database, workspaceId: string, personId: string, channel: Channel): Promise<string | null> {
-  const kind = contactKindOf(channel);
-  if (!kind) return null;
-  const [row] = await withWorkspace(db, workspaceId, (tx) =>
-    tx
-      .select({ value: contactDetail.value })
-      .from(contactDetail)
-      .where(and(eq(contactDetail.personId, personId), eq(contactDetail.kind, kind))),
-  );
-  return row?.value ?? null;
+async function addressOf(db: Database, workspaceId: string, task: { personId: string; enrollmentId: string }, channel: Channel): Promise<string | null> {
+  return withWorkspace(db, workspaceId, async (tx) => (await addressesFor(tx, [task]))(task, channel));
 }
 
 /**
@@ -109,7 +115,7 @@ export async function completeTask(services: Services, workspaceId: string, user
   if (!task || task.status !== "to_do") return { ok: false, error: "Cette tâche n’est plus à faire." };
   const now = services.now();
   const channel = task.channel as Channel;
-  const address = (await addressOf(services.db, workspaceId, task.personId, channel)) ?? `prospect:${task.enrollmentId}`;
+  const address = (await addressOf(services.db, workspaceId, task, channel)) ?? `prospect:${task.enrollmentId}`;
   await recordOutreach(services.db, workspaceId, { connectionId: null, channel, address, enrollmentId: task.enrollmentId, at: now });
   await withWorkspace(services.db, workspaceId, (tx) => tx.update(stepMessage).set({ status: "done", outcome, summary: summary?.trim() || null, doneBy: userId, sentAt: now }).where(eq(stepMessage.id, messageId)));
   if (outcome === "replied") {
@@ -127,7 +133,7 @@ export async function placeTaskCall(services: Services, workspaceId: string, use
   if (!task.callConnection) return { ok: false, error: "Cette séquence n’a pas de téléphonie connectée : appelez depuis votre téléphone." };
   const memberPhone = await memberPhoneOf(services.db, workspaceId, userId);
   if (!memberPhone) return { ok: false, error: "Indiquez votre numéro dans les Réglages : c’est lui qui sonne d’abord." };
-  const prospectPhone = await addressOf(services.db, workspaceId, task.personId, "call");
+  const prospectPhone = await addressOf(services.db, workspaceId, task, "call");
   if (!prospectPhone) return { ok: false, error: "Cette personne n’a pas de numéro." };
   const opened = await openConnection(services, workspaceId, task.callConnection);
   if (!opened?.client.placeCall) return { ok: false, error: "Cette connexion ne passe pas d’appels." };

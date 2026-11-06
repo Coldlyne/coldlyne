@@ -71,6 +71,13 @@
       "when": 1793857446508,
       "tag": "0009_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793974052639,
+      "tag": "0010_directory",
+      "breakpoints": true
     }
   ]
 }

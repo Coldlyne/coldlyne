@@ -4,13 +4,12 @@ import { ProviderError } from "@/infrastructure/connectors/http";
 import { sameSecret } from "@/infrastructure/crypto/secrets";
 import { user } from "@/infrastructure/db/schema/auth";
 import { connection, outreach, signal } from "@/infrastructure/db/schema/connections";
-import { suppression } from "@/infrastructure/db/schema/prospects";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import type { Database } from "@/infrastructure/db/client";
 import { sendOwnMail } from "@/infrastructure/mail/own-mail";
 import type { Channel, InboundRequest, Notification, Signal, SignalType } from "./ports";
 import { clientOf, connectionsWith, type OpenedConnection } from "./connections";
-import { reactToSignals } from "./enrollments";
+import { addToSuppressionList, reactToSignals } from "./enrollments";
 import type { Services } from "./services";
 
 /** What a STOP or a bounce puts on the suppression list, and why. */
@@ -39,7 +38,7 @@ export async function recordSignals(db: Database, workspaceId: string, connectio
     const fresh = new Set(inserted.map((row) => row.externalId));
     const added = concerned.filter((found) => fresh.has(found.externalId));
     const suppressed = added.flatMap((found) => (SUPPRESSES[found.type] && found.address ? [{ value: found.address, reason: SUPPRESSES[found.type]! }] : []));
-    if (suppressed.length) await tx.insert(suppression).values(suppressed).onConflictDoNothing();
+    await addToSuppressionList(tx, suppressed);
     await reactToSignals(tx, added);
     return added;
   });

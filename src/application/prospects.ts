@@ -1,8 +1,12 @@
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { count, desc, eq, sql } from "drizzle-orm";
+import type { ElsewhereNote } from "@/domain/directory";
 import { prospectable, type RegistryCompany } from "@/domain/registry";
 import type { Database } from "@/infrastructure/db/client";
 import { company, person, prospect, prospectList, suppression } from "@/infrastructure/db/schema/prospects";
 import { withWorkspace } from "@/infrastructure/db/tenant";
+import { elsewhereAmong, lookUpCompanies, upsertCompany, upsertPerson } from "./directory";
+import { addToSuppressionList, ownSuppression, stopEveryoneAt, stopExcludedAt } from "./enrollments";
+import type { Services } from "./services";
 
 /** A new list of prospects. */
 export async function createList(db: Database, workspaceId: string, name: string): Promise<string> {
@@ -14,16 +18,19 @@ export interface Added {
   added: number;
   /** Companies left out, with why. */
   skipped: { siren: string; name: string; why: string }[];
+  /** Those just added that another workspace of the directory wrote to, or who opted out of it: nothing stops them, a member decides. */
+  elsewhere?: ElsewhereNote[];
 }
 
 /**
  * Puts the directors (people, not companies) of these registry companies on a list. A company
  * that refused commercial use of its data, or isn't active, is left out; a company or person
- * already known is reused, and someone already on the list isn't added twice.
+ * the directory already holds is reused, and someone already on the list isn't added twice.
  */
 export async function addFromRegistry(db: Database, workspaceId: string, listId: string, companies: readonly RegistryCompany[]): Promise<Added> {
   return withWorkspace(db, workspaceId, async (tx) => {
     const result: Added = { added: 0, skipped: [] };
+    const addedPeople: string[] = [];
     for (const found of companies) {
       const people = found.directors.filter((director) => director.kind === "person");
       if (!prospectable(found) || people.length === 0) {
@@ -35,28 +42,19 @@ export async function addFromRegistry(db: Database, workspaceId: string, listId:
         const personId = await upsertPerson(tx, companyId, director);
         const inserted = await tx.insert(prospect).values({ listId, personId }).onConflictDoNothing().returning({ id: prospect.id });
         result.added += inserted.length;
+        if (inserted.length) addedPeople.push(personId);
       }
     }
-    return result;
+    const elsewhere = await elsewhereAmong(tx, addedPeople);
+    return elsewhere.length ? { ...result, elsewhere } : result;
   });
 }
 
-async function upsertCompany(tx: Database, found: RegistryCompany): Promise<string> {
-  const values = { siren: found.siren, name: found.name, legalForm: found.legalForm, activity: found.activity, street: found.street, postcode: found.postcode, city: found.city, createdOn: found.createdOn, registryOptOut: found.registryOptOut, source: "registry" as const };
-  const [row] = await tx
-    .insert(company)
-    .values(values)
-    .onConflictDoUpdate({ target: [company.workspaceId, company.siren], set: { ...values, updatedAt: sql`now()` } })
-    .returning({ id: company.id });
-  return row.id;
-}
-
-async function upsertPerson(tx: Database, companyId: string, director: RegistryCompany["directors"][number]): Promise<string> {
-  const match = and(eq(person.companyId, companyId), director.firstName === null ? sql`${person.firstName} is null` : eq(person.firstName, director.firstName), eq(person.lastName, director.lastName));
-  const [existing] = await tx.select({ id: person.id }).from(person).where(match);
-  if (existing) return existing.id;
-  const [row] = await tx.insert(person).values({ companyId, firstName: director.firstName, lastName: director.lastName, role: director.role, source: "registry" }).returning({ id: person.id });
-  return row.id;
+/** Puts these companies' directors on a list by SIREN, asking the registry only about what the directory can't answer for. */
+export async function addCompanies(services: Services, workspaceId: string, listId: string, sirens: readonly string[]): Promise<Added & { notFound: string[] }> {
+  const found = await lookUpCompanies(services, workspaceId, sirens);
+  const added = await addFromRegistry(services.db, workspaceId, listId, [...found.values()]);
+  return { ...added, notFound: sirens.filter((siren) => !found.has(siren)) };
 }
 
 /** A list's prospects with their person and company, the latest added first. */
@@ -84,12 +82,21 @@ export async function listsOf(db: Database, workspaceId: string) {
   );
 }
 
-/** Never writes to this address or domain again, on any channel. Lowercased: the list is matched that way. */
+/**
+ * This workspace never writes to this address or domain again, on any channel, from any mailbox or
+ * sending domain it has or connects later. Lowercased: the list is matched that way. Someone who asked
+ * stops at once, as with a STOP, what was about to go to them included; the workspace's own exclusion
+ * ("this domain is my client") stops them too, and leaves their colleagues be.
+ */
 export async function suppress(db: Database, workspaceId: string, value: string, reason: "asked" | "member" = "member"): Promise<void> {
-  await withWorkspace(db, workspaceId, (tx) => tx.insert(suppression).values({ value: value.trim().toLowerCase(), reason }).onConflictDoNothing());
+  const normalized = value.trim().toLowerCase();
+  await withWorkspace(db, workspaceId, async (tx) => {
+    await addToSuppressionList(tx, [{ value: normalized, reason }]);
+    await (reason === "asked" ? stopEveryoneAt(tx, normalized) : stopExcludedAt(tx, normalized));
+  });
 }
 
-/** Who the workspace never writes to again, the latest first. */
+/** Who the workspace never writes to again, the latest first. Its own list only: what bounced for another workspace may be an address from that workspace's own file. */
 export async function suppressedOf(db: Database, workspaceId: string) {
-  return withWorkspace(db, workspaceId, (tx) => tx.select({ value: suppression.value, reason: suppression.reason, createdAt: suppression.createdAt }).from(suppression).orderBy(desc(suppression.createdAt)));
+  return withWorkspace(db, workspaceId, (tx) => tx.select({ value: suppression.value, reason: suppression.reason, createdAt: suppression.createdAt }).from(suppression).where(ownSuppression).orderBy(desc(suppression.createdAt)));
 }

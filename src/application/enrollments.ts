@@ -1,17 +1,21 @@
-import { and, asc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
-import { dueAfter, isSuppressed, nextStep, type StepOutcome } from "@/domain/sequences";
+import { and, asc, eq, inArray, isNull, ne, notInArray, or, sql, type AnyColumn } from "drizzle-orm";
+import type { ElsewhereNote } from "@/domain/directory";
+import { dueAfter, isSuppressed, nextStep, type OffLimits, type StepOutcome } from "@/domain/sequences";
 import type { Database } from "@/infrastructure/db/client";
 import { outreach } from "@/infrastructure/db/schema/connections";
 import { company, contactDetail, person, prospect, suppression } from "@/infrastructure/db/schema/prospects";
 import { enrollment, sequence, sequenceStep, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import { scheduledWorkChanged } from "@/infrastructure/scheduling/scheduled-work";
+import { elsewhereAmong } from "./directory";
 import type { Signal } from "./ports";
 
 export interface Enrolled {
   enrolled: number;
   /** People left out, with why. */
   skipped: { prospectId: string; name: string; why: string }[];
+  /** Those just added that another workspace of the directory wrote to, or who opted out of it: nothing stops them, a member decides. */
+  elsewhere?: ElsewhereNote[];
 }
 
 const NOT_AGAIN = new Set(["replied", "bounced", "opted_out"]);
@@ -29,6 +33,7 @@ export async function enroll(db: Database, workspaceId: string, sequenceId: stri
     const started = target.status === "running" || target.status === "finished";
     const added: Enrolled = { enrolled: 0, skipped: [] };
     const suppressed = await suppressedIn(tx);
+    const enrolledPeople: string[] = [];
     for (const candidate of await candidatesOf(tx, prospectIds)) {
       const why = await refusalOf(tx, sequenceId, candidate, suppressed);
       if (why) {
@@ -38,13 +43,15 @@ export async function enroll(db: Database, workspaceId: string, sequenceId: stri
       await tx.insert(enrollment).values({ sequenceId, prospectId: candidate.prospectId, personId: candidate.personId, companyId: candidate.companyId, nextDueAt: started ? now : null });
       await tx.update(prospect).set({ state: "in_sequence" }).where(eq(prospect.id, candidate.prospectId));
       added.enrolled += 1;
+      enrolledPeople.push(candidate.personId);
     }
     // A finished sequence someone joins is running again: it had only stopped for lack of people.
     if (target.status === "finished" && added.enrolled > 0) {
       await tx.update(sequence).set({ status: "running" }).where(eq(sequence.id, sequenceId));
       reopened = true;
     }
-    return added;
+    const elsewhere = await elsewhereAmong(tx, enrolledPeople);
+    return elsewhere.length ? { ...added, elsewhere } : added;
   });
   if (reopened) scheduledWorkChanged();
   return result;
@@ -67,15 +74,36 @@ async function candidatesOf(tx: Database, prospectIds: readonly string[]) {
     .where(inArray(prospect.id, [...prospectIds]));
 }
 
-export async function suppressedIn(tx: Database): Promise<Set<string>> {
-  return new Set((await tx.select({ value: suppression.value }).from(suppression)).map((row) => row.value));
+/**
+ * Puts these on the workspace's list. Someone asking, or an address bouncing, says more than the
+ * workspace's own exclusion of them, which it replaces: what the directory's other workspaces are told
+ * goes by why. Whichever came first, nothing else ever comes off.
+ */
+export async function addToSuppressionList(tx: Database, entries: readonly { value: string; reason: "opted_out" | "bounced" | "asked" | "member" }[]): Promise<void> {
+  const distinct = [...new Map(entries.map((entry) => [entry.value, entry])).values()];
+  if (distinct.length === 0) return;
+  await tx
+    .insert(suppression)
+    .values(distinct)
+    .onConflictDoUpdate({ target: [suppression.workspaceId, suppression.value], set: { reason: sql`excluded.reason` }, where: sql`${suppression.reason} = 'member' and excluded.reason <> 'member'` });
 }
 
-async function refusalOf(tx: Database, sequenceId: string, candidate: Awaited<ReturnType<typeof candidatesOf>>[number], suppressed: ReadonlySet<string>): Promise<string | null> {
+/** A row of this workspace's own list, rather than a bounce another workspace of its group let it read. */
+export const ownSuppression = sql`${suppression.workspaceId} = app_workspace_id()`;
+
+/** What this workspace can't write to: its own list, and the addresses that bounced for another workspace of its group. Row-level security decides which it reads. */
+export async function suppressedIn(tx: Database): Promise<OffLimits> {
+  const rows = await tx.select({ value: suppression.value, reason: suppression.reason, own: sql<boolean>`${ownSuppression}` }).from(suppression);
+  const among = (keep: (row: (typeof rows)[number]) => boolean) => new Set(rows.filter(keep).map(({ value }) => value));
+  return { refused: among(({ own, reason }) => own && reason !== "bounced"), bouncedHere: among(({ own, reason }) => own && reason === "bounced"), bouncedElsewhere: among(({ own }) => !own) };
+}
+
+async function refusalOf(tx: Database, sequenceId: string, candidate: Awaited<ReturnType<typeof candidatesOf>>[number], suppressed: OffLimits): Promise<string | null> {
   if (candidate.registryOptOut) return "Cette entreprise refuse l’usage commercial de ses données.";
   if (NOT_AGAIN.has(candidate.state)) return "Cette personne a déjà répondu, refusé d’être contactée, ou son adresse est refusée.";
   const details = await tx.select({ value: contactDetail.value }).from(contactDetail).where(eq(contactDetail.personId, candidate.personId));
-  if (details.some(({ value }) => isSuppressed(value, suppressed))) return "Cette personne est sur la liste d’exclusion.";
+  // This workspace's own list, for any of their details. What bounced for another workspace only rules that address out.
+  if (details.some(({ value }) => isSuppressed(value, suppressed.refused) || isSuppressed(value, suppressed.bouncedHere))) return "Cette personne est sur la liste d’exclusion.";
   const [busy] = await tx
     .select({ sequenceId: enrollment.sequenceId })
     .from(enrollment)
@@ -109,6 +137,7 @@ const STOP_NOTES: Record<string, string> = {
   opted_out: "Annulé : cette personne ne veut plus être contactée.",
   bounced: "Annulé : l’adresse est refusée.",
   suppressed: "Annulé : l’adresse est sur la liste d’exclusion.",
+  registry_opt_out: "Annulé : cette entreprise refuse l’usage commercial de ses données.",
   member: "Retiré par un membre.",
 };
 
@@ -157,6 +186,28 @@ async function stopPersonAndCompany(tx: Database, personId: string, companyId: s
       .set({ state: "done" })
       .where(inArray(prospect.id, colleagueProspects.map((row) => row.id)));
   }
+}
+
+/** Whether this column holds the address, or an address at the domain: what `isSuppressed` matches. */
+const heldAt = (column: AnyColumn, value: string) => or(eq(column, value), sql`split_part(${column}, '@', 2) = ${value}`);
+
+/** Everyone on a sequence at this address or domain, by what the workspace knows of them and by what it wrote to. */
+async function enrollmentsAt(tx: Database, value: string) {
+  const fields = { id: enrollment.id, personId: enrollment.personId, companyId: enrollment.companyId };
+  const byDetail = await tx.selectDistinct(fields).from(enrollment).innerJoin(contactDetail, eq(contactDetail.personId, enrollment.personId)).where(heldAt(contactDetail.value, value));
+  const byOutreach = await tx.selectDistinct(fields).from(enrollment).innerJoin(outreach, eq(outreach.enrollmentId, enrollment.id)).where(heldAt(outreach.address, value));
+  return [...byDetail, ...byOutreach];
+}
+
+/** A member marked someone as having asked not to be contacted: it does what their STOP would, in this workspace. */
+export async function stopEveryoneAt(tx: Database, value: string): Promise<void> {
+  const people = new Map((await enrollmentsAt(tx, value)).map((row) => [row.personId, row]));
+  for (const { personId, companyId } of people.values()) await stopPersonAndCompany(tx, personId, companyId, "opted_out");
+}
+
+/** The workspace excluded someone itself: their sequences stop, with what waits for a member, and nobody else's. */
+export async function stopExcludedAt(tx: Database, value: string): Promise<void> {
+  await stopEnrollments(tx, (await enrollmentsAt(tx, value)).map(({ id }) => id), "suppressed");
 }
 
 async function stepsOf(tx: Database, sequenceId: string) {

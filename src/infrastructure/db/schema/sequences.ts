@@ -121,7 +121,7 @@ export const enrollment = pgTable(
       .notNull()
       .references(() => company.id, { onDelete: "cascade" }),
     status: enrollmentStatus().notNull().default("active"),
-    /** replied, colleague_replied, opted_out, bounced, suppressed, member. */
+    /** replied, colleague_replied, opted_out, bounced, suppressed, registry_opt_out, member. */
     stopReason: text(),
     lastPosition: integer().notNull().default(-1),
     /** How the last step ended, for the steps that depend on it. */

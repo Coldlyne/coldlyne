@@ -1,8 +1,8 @@
 import { createHmac } from "node:crypto";
 import { sameSecret } from "@/infrastructure/crypto/secrets";
-import { suppression } from "@/infrastructure/db/schema/prospects";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import type { Env } from "@/infrastructure/env";
+import { addToSuppressionList } from "./enrollments";
 import type { Services } from "./services";
 import { recordSignals } from "./signals";
 import { settingsOf } from "./workspace-settings";
@@ -48,7 +48,7 @@ export async function unsubscribe(services: Services, token: string): Promise<bo
   const read = readUnsubscribeToken(services.settings, token);
   if (!read) return false;
   const { workspaceId, address } = read;
-  await withWorkspace(services.db, workspaceId, (tx) => tx.insert(suppression).values({ value: address, reason: "opted_out" }).onConflictDoNothing());
+  await withWorkspace(services.db, workspaceId, (tx) => addToSuppressionList(tx, [{ value: address, reason: "opted_out" }]));
   await recordSignals(services.db, workspaceId, null, [{ type: "opted_out", channel: address.includes("@") ? "email" : "sms", externalId: `unsubscribe:${address}:${services.now().toISOString()}`, address, at: services.now(), detail: "Désinscription par le lien du message" }]);
   return true;
 }

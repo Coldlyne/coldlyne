@@ -422,7 +422,8 @@ describe("a watchlist", () => {
     expect(decodeURIComponent(String(calls[0].url))).toContain("2026-11-02");
     now = new Date("2026-11-10T09:00:00Z");
     expect(await runWatchlist(watcher, workspaceId, id)).toEqual({ ok: true, added: 0 });
-    expect(decodeURIComponent(String(calls.at(-2)?.url))).toContain("2026-11-09");
+    // BODACC again from where it stopped; the company itself needs no new lookup, the directory has it.
+    expect(decodeURIComponent(String(calls.at(-1)?.url))).toContain("2026-11-09");
   });
 
   it("keeps only what the registry says matches, and never a company that refused", async () => {

@@ -19,6 +19,8 @@ export interface RegistryCompany {
   /** It refused commercial use of its data: never prospected. */
   registryOptOut: boolean;
   directors: RegistryDirector[];
+  /** When the registry said this, when it comes from what a directory kept; none when it was just read. */
+  checkedAt?: Date;
 }
 
 export interface RegistryDirector {

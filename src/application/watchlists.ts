@@ -4,9 +4,9 @@ import { searchBodacc } from "@/infrastructure/bodacc/client";
 import { watchlist, type WatchQuery } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import type { Database } from "@/infrastructure/db/client";
-import { companiesBySiren } from "@/infrastructure/registry/client";
 import { scheduledWorkChanged } from "@/infrastructure/scheduling/scheduled-work";
 import { connectionsWith } from "./connections";
+import { lookUpCompanies } from "./directory";
 import { addFromRegistry } from "./prospects";
 import type { Services } from "./services";
 
@@ -75,7 +75,7 @@ export async function runWatchlist(services: Services, workspaceId: string, id: 
   const from = row.checkedUntil ?? new Date(now.getTime() - FIRST_LOOK_DAYS * DAY_MS);
   try {
     const { sirens, total } = await announced(services, row.query, from, now);
-    const companies = [...(await companiesBySiren(sirens, services.fetch)).values()].filter((found) => matches(found, row.query));
+    const companies = [...(await lookUpCompanies(services, workspaceId, sirens)).values()].filter((found) => matches(found, row.query));
     const { added } = await addFromRegistry(services.db, workspaceId, row.listId, companies);
     await withWorkspace(services.db, workspaceId, (tx) => tx.update(watchlist).set({ checkedUntil: now, lastAdded: added, lastError: tooMany(sirens.length, total) }).where(eq(watchlist.id, id)));
     if (added > 0) await announce(services, workspaceId, row.name, added, row.listId);

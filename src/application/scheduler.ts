@@ -1,5 +1,6 @@
-import { and, asc, count, eq, gte, inArray, lt, min, notExists, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lt, min, notExists, sql } from "drizzle-orm";
 import {
+  addressToUse,
   contactKindOf,
   dailyAllowance,
   domainOf,
@@ -14,22 +15,26 @@ import {
   sentByColdlyne,
   smsText,
   type Channel,
+  type AddressChoice,
   type DataOrigin,
   type MergeValues,
+  type OffLimits,
   type SenderIdentity,
   type StepOutcome,
 } from "@/domain/sequences";
+import { onePerDetail } from "@/domain/contacts";
 import { acceptsMail } from "@/infrastructure/dns/mail-domain";
 import { letterPdf, postalAddressOf } from "@/infrastructure/letters/pdf";
 import { connection, outreach, signal } from "@/infrastructure/db/schema/connections";
-import { company, contactDetail, person, suppression } from "@/infrastructure/db/schema/prospects";
+import { company, contactDetail, person, whatsappConsent } from "@/infrastructure/db/schema/prospects";
 import { enrollment, sequence, sequenceStep, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import type { Database } from "@/infrastructure/db/client";
 import { ProviderError } from "@/infrastructure/connectors/http";
 import { scheduledWorkChanged } from "@/infrastructure/scheduling/scheduled-work";
 import { connectionsWith, openConnection, type OpenedConnection } from "./connections";
-import { advance, bounce, dueEnrollments, stopEnrollments, suppressedIn, type DueEnrollment } from "./enrollments";
+import { ownDetailsFirst } from "./directory";
+import { addToSuppressionList, advance, bounce, dueEnrollments, stopEnrollments, suppressedIn, type DueEnrollment } from "./enrollments";
 import { markFailing, mailFailing, recordOutreach, syncConnection } from "./signals";
 import type { SentMessage } from "./ports";
 import type { Services } from "./services";
@@ -106,9 +111,33 @@ export async function finishEmptiedSequences(db: Database): Promise<number> {
   return finished.length;
 }
 
+const STILL_ON_A_SEQUENCE = inArray(enrollment.status, ["active", "waiting_member"]);
+
+/** Every workspace with someone still on a sequence at a company that refused commercial use of its data, on the trusted path. Nothing need be due: a call waiting for a member isn't. */
+async function workspacesWithRefusedCompanies(db: Database): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ workspaceId: enrollment.workspaceId })
+    .from(enrollment)
+    .innerJoin(company, eq(company.id, enrollment.companyId))
+    .where(and(eq(company.registryOptOut, true), STILL_ON_A_SEQUENCE));
+  return rows.map((row) => row.workspaceId);
+}
+
+/** A company can refuse at any time, and any workspace of its group may be the one to hear it: whoever of it is still on a sequence here stops. */
+async function stopRefusedCompanies(db: Database, workspaceId: string) {
+  await withWorkspace(db, workspaceId, async (tx) => {
+    const refused = await tx
+      .select({ id: enrollment.id })
+      .from(enrollment)
+      .innerJoin(company, eq(company.id, enrollment.companyId))
+      .where(and(eq(company.registryOptOut, true), STILL_ON_A_SEQUENCE));
+    await stopEnrollments(tx, refused.map(({ id }) => id), "registry_opt_out");
+  });
+}
+
 /** One scheduled run, over every workspace with something due. One workspace's trouble is none of the others'. */
 export async function runScheduler(services: Services): Promise<{ workspaces: number; sent: number }> {
-  const workspaces = await workspacesWithDueWork(services.db, services.now());
+  const workspaces = [...new Set([...(await workspacesWithDueWork(services.db, services.now())), ...(await workspacesWithRefusedCompanies(services.db))])];
   let sent = 0;
   for (const workspaceId of workspaces) {
     try {
@@ -126,6 +155,7 @@ export async function tickWorkspace(services: Services, workspaceId: string): Pr
   const now = services.now();
   const result: TickResult = { sent: 0, queued: 0, tasks: 0, skipped: 0, failed: 0 };
   await recoverInterrupted(services.db, workspaceId, now);
+  await stopRefusedCompanies(services.db, workspaceId);
   const first = await withWorkspace(services.db, workspaceId, (tx) => dueEnrollments(tx, now));
   if (first.length === 0) return result;
   const settings = await settingsOf(services.db, workspaceId);
@@ -238,17 +268,21 @@ interface PersonFacts {
   contacts: { kind: string; value: string; page: string | null }[];
   whatsappConsent: boolean;
   address: { name: string; company: string; street: string | null; postcode: string | null; city: string | null };
-  suppressed: Set<string>;
+  suppressed: OffLimits;
+  /** What this enrollment already wrote to, the latest first: a conversation keeps its address. */
+  used: string[];
 }
 
 async function factsOf(tick: Tick, due: DueEnrollment): Promise<PersonFacts> {
   return withWorkspace(tick.services.db, tick.workspaceId, async (tx) => {
     const [row] = await tx
-      .select({ firstName: person.firstName, lastName: person.lastName, role: person.role, source: person.source, consent: person.whatsappConsentAt, company: company.name, street: company.street, postcode: company.postcode, city: company.city })
+      .select({ firstName: person.firstName, lastName: person.lastName, role: person.role, source: person.source, consent: whatsappConsent.agreedAt, company: company.name, street: company.street, postcode: company.postcode, city: company.city })
       .from(person)
       .innerJoin(company, eq(company.id, person.companyId))
+      .leftJoin(whatsappConsent, eq(whatsappConsent.personId, person.id))
       .where(eq(person.id, due.personId));
-    const contacts = await tx.select({ kind: contactDetail.kind, value: contactDetail.value, page: contactDetail.page }).from(contactDetail).where(eq(contactDetail.personId, due.personId));
+    const contacts = onePerDetail(await tx.select({ kind: contactDetail.kind, value: contactDetail.value, page: contactDetail.page }).from(contactDetail).where(eq(contactDetail.personId, due.personId)).orderBy(...ownDetailsFirst));
+    const used = await tx.select({ address: outreach.address }).from(outreach).where(eq(outreach.enrollmentId, due.id)).orderBy(desc(outreach.sentAt));
     const fullName = [row.firstName, row.lastName].filter(Boolean).join(" ");
     return {
       values: { firstName: row.firstName, lastName: row.lastName, company: row.company, role: row.role, city: row.city, sender: tick.sender?.name },
@@ -257,19 +291,20 @@ async function factsOf(tick: Tick, due: DueEnrollment): Promise<PersonFacts> {
       whatsappConsent: row.consent !== null,
       address: { name: fullName, company: row.company, street: row.street, postcode: row.postcode, city: row.city },
       suppressed: await suppressedIn(tx),
+      used: used.map(({ address }) => address),
     };
   });
 }
 
-function addressFor(channel: Channel, facts: PersonFacts): { value: string; page?: string | null } | null {
+function addressFor(channel: Channel, facts: PersonFacts): AddressChoice<{ value: string; page?: string | null }> {
   if (channel === "letter") {
     const { street, postcode, city, company: name } = facts.address;
-    return street && postcode && city ? { value: `${name}, ${street}, ${postcode} ${city}` } : null;
+    return street && postcode && city ? { address: { value: `${name}, ${street}, ${postcode} ${city}` } } : { missing: "none" };
   }
-  const kind = contactKindOf(channel);
-  const found = facts.contacts.find((contact) => contact.kind === kind);
-  return found ? { value: found.value, page: found.page } : null;
+  return addressToUse(facts.contacts, contactKindOf(channel), facts.used, facts.suppressed);
 }
+
+const BOUNCED_ELSEWHERE = "L’adresse connue est refusée : un autre espace du groupe l’a constaté.";
 
 const NO_ADDRESS: Record<string, string> = { email: "Pas d’adresse email", letter: "Pas d’adresse postale", linkedin: "Pas de profil LinkedIn", instagram: "Pas de profil Instagram", messenger: "Pas de profil Facebook", x: "Pas de profil X" };
 
@@ -277,16 +312,18 @@ const NO_ADDRESS: Record<string, string> = { email: "Pas d’adresse email", let
 async function process(tick: Tick, due: DueEnrollment) {
   const steps = tick.steps.get(due.sequenceId) ?? [];
   const facts = await factsOf(tick, due);
+  // Any of their details on this workspace's own list stops them, not only the one the next step would use: sharing gives someone addresses this workspace never chose.
+  if (facts.contacts.some(({ value }) => isSuppressed(value, facts.suppressed.refused))) return stop(tick, due, "suppressed");
   let position = due.lastPosition;
   const outcome = due.lastOutcome as StepOutcome | null;
   for (let turn = 0; turn <= steps.length; turn++) {
     const step = nextStep(steps, position, outcome);
     if (!step) return finish(tick, due, position, outcome);
     const channel = step.channel as Channel;
-    const address = addressFor(channel, facts);
-    if (address && channel !== "letter" && isSuppressed(address.value, facts.suppressed)) return stop(tick, due, "suppressed");
+    const { address, missing } = addressFor(channel, facts);
+    if (missing === "bounced_here") return stop(tick, due, "suppressed");
     if (address) return sentByColdlyne(channel, facts.whatsappConsent) && (channel !== "whatsapp" || step.options.template) ? deliver(tick, due, step, facts, address) : openTask(tick, due, step, facts);
-    await skip(tick, due, step, NO_ADDRESS[channel] ?? "Pas de numéro de téléphone", outcome);
+    await skip(tick, due, step, missing === "bounced_elsewhere" ? BOUNCED_ELSEWHERE : (NO_ADDRESS[channel] ?? "Pas de numéro de téléphone"), outcome);
     tick.result.skipped += 1;
     position = step.position;
     if (nextDueLater(steps, position, outcome)) return;
@@ -426,7 +463,7 @@ const channelConnection = (row: SequenceRow, channel: Channel) => (channel === "
 async function refuseAddress(tick: Tick, due: DueEnrollment, message: MessageRow, address: string) {
   await withWorkspace(tick.services.db, tick.workspaceId, async (tx) => {
     await tx.update(stepMessage).set({ status: "skipped", note: `Le domaine de ${address} ne reçoit pas d’emails.` }).where(eq(stepMessage.id, message.id));
-    await tx.insert(suppression).values({ value: address.toLowerCase(), reason: "bounced" }).onConflictDoNothing();
+    await addToSuppressionList(tx, [{ value: address.toLowerCase(), reason: "bounced" }]);
     await bounce(tx, due, tick.now);
   });
   tick.result.skipped += 1;

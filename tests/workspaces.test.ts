@@ -13,8 +13,8 @@ import { fakeFetch } from "./support/fetch";
 
 const settings = { COLDLYNE_ADMINS: "founder@example.com, Other@Example.com", BETTER_AUTH_URL: "https://coldlyne.test", COLDLYNE_SECRETS_KEY: Buffer.alloc(32, 1).toString("base64") } as Env;
 
-const ACME: MemberWorkspace = { id: "11111111-1111-4111-8111-111111111111", name: "Acme", role: "owner" };
-const NORTHWIND: MemberWorkspace = { id: "22222222-2222-4222-8222-222222222222", name: "Northwind", role: "member" };
+const ACME: MemberWorkspace = { id: "11111111-1111-4111-8111-111111111111", name: "Acme", role: "owner", group: "Acme" };
+const NORTHWIND: MemberWorkspace = { id: "22222222-2222-4222-8222-222222222222", name: "Northwind", role: "member", group: "Northwind" };
 
 let db: Database;
 let services: Services;
@@ -76,7 +76,7 @@ describe("who may start a workspace", () => {
     const { userId } = await createTestWorkspace(db, "First");
     const second = await startWorkspace(db, settings, { userId, email: "founder@example.com" }, "  Second  ");
     expect(second).toEqual(expect.any(String));
-    expect(await workspacesOf(db, userId)).toEqual([expect.objectContaining({ name: "First", role: "owner" }), { id: second, name: "Second", role: "owner" }]);
+    expect(await workspacesOf(db, userId)).toEqual([expect.objectContaining({ name: "First", role: "owner" }), { id: second, name: "Second", role: "owner", group: "Second" }]);
   });
 
   it("refuses anyone else, even an owner of a workspace they were given, and adds nothing", async () => {

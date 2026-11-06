@@ -229,6 +229,32 @@ export const isSuppressed = (address: string, suppressed: ReadonlySet<string>) =
   return suppressed.has(value) || (value.includes("@") && suppressed.has(domainOf(value)));
 };
 
+/** What a workspace can't write to, by why, since each does something different. */
+export interface OffLimits {
+  /** Its own list, but for bounces: someone asked, or the workspace excluded them. Any of a person's details on it stops them. */
+  refused: ReadonlySet<string>;
+  /** Addresses that bounced for this workspace: a sequence goes on only through a step written for that. */
+  bouncedHere: ReadonlySet<string>;
+  /** Addresses that bounced for another workspace of its group: skipped, and the person isn't stopped. */
+  bouncedElsewhere: ReadonlySet<string>;
+}
+
+export type AddressChoice<T> = { address: T; missing?: undefined } | { address?: undefined; missing: "none" | "bounced_here" | "bounced_elsewhere" };
+
+/**
+ * Which of someone's details to write to on a channel. Details come in the order to try them, this
+ * workspace's own first; what it already wrote to comes before that, so a conversation keeps its
+ * address. Nothing that bounced is used, whoever saw it bounce.
+ */
+export function addressToUse<T extends { kind: string; value: string }>(details: readonly T[], kind: string | null | undefined, used: readonly string[], offLimits: Pick<OffLimits, "bouncedHere" | "bouncedElsewhere">): AddressChoice<T> {
+  const onChannel = details.filter((detail) => detail.kind === kind);
+  const inOrder = [...used.flatMap((value) => onChannel.filter((detail) => detail.value === value)), ...onChannel];
+  const working = inOrder.find(({ value }) => !isSuppressed(value, offLimits.bouncedHere) && !isSuppressed(value, offLimits.bouncedElsewhere));
+  if (working) return { address: working };
+  if (onChannel.some(({ value }) => isSuppressed(value, offLimits.bouncedHere))) return { missing: "bounced_here" };
+  return { missing: onChannel.length ? "bounced_elsewhere" : "none" };
+}
+
 // ─── What a reply is ───────────────────────────────────────────────────────
 
 export const INTERESTS = ["interested", "not_now", "not_interested", "wrong_person"] as const;

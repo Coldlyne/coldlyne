@@ -238,7 +238,7 @@ describe("accepting an invitation", () => {
     await createTestWorkspace(db, "Another");
     const person = await account(email);
     expect(await acceptInvitation(db, person, token, NOW)).toEqual({ ok: true, workspaceId });
-    expect(await workspacesOf(db, person)).toEqual([{ id: workspaceId, name: "Acme", role: "admin" }]);
+    expect(await workspacesOf(db, person)).toEqual([{ id: workspaceId, name: "Acme", role: "admin", group: "Acme" }]);
   });
 
   it("works once: after that the link says it was used", async () => {

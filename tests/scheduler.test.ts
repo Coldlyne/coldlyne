@@ -10,12 +10,13 @@ import { whatIsScheduled } from "@/application/scheduled-work";
 import { addStep, createSequence, launchProblems, launchSequence, removeStep, sequenceOf, sequencesOf, setPaused, updateSequence, updateStep, type StepInput } from "@/application/sequences";
 import type { Services } from "@/application/services";
 import { recordOutreach, recordSignals } from "@/application/signals";
+import { recordWhatsappConsent } from "@/application/threads";
 import { readUnsubscribeToken, unsubscribe, unsubscribeSubject, unsubscribeToken, unsubscribeUrl } from "@/application/unsubscribe";
 import { saveSettings } from "@/application/workspace-settings";
 import { fromRegistry } from "@/domain/registry";
 import type { Database } from "@/infrastructure/db/client";
 import { connection, outreach } from "@/infrastructure/db/schema/connections";
-import { person, prospect, suppression } from "@/infrastructure/db/schema/prospects";
+import { prospect, suppression } from "@/infrastructure/db/schema/prospects";
 import { enrollment, sequence, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import type { Env } from "@/infrastructure/env";
@@ -693,14 +694,14 @@ describe("the other channels", () => {
     expect(await tickWorkspace(services, refused.workspaceId)).toMatchObject({ sent: 0, tasks: 1 });
     expect(sent.whatsapp).toEqual([]);
     const agreed = await withProviders([step]);
-    await withWorkspace(db, agreed.workspaceId, (tx) => tx.update(person).set({ whatsappConsentAt: now }));
+    await recordWhatsappConsent(db, agreed.workspaceId, agreed.prospects[0].id, true, now);
     await tickWorkspace(services, agreed.workspaceId);
     expect(sent.whatsapp).toEqual([{ to: "+33612345678", template: "premier_contact", language: "fr", parameters: ["Jeanne"] }]);
   });
 
   it("leaves WhatsApp to a member when the step has no approved template", async () => {
-    const { workspaceId } = await withProviders([{ channel: "whatsapp", body: "Bonjour" }]);
-    await withWorkspace(db, workspaceId, (tx) => tx.update(person).set({ whatsappConsentAt: now }));
+    const { workspaceId, prospects } = await withProviders([{ channel: "whatsapp", body: "Bonjour" }]);
+    await recordWhatsappConsent(db, workspaceId, prospects[0].id, true, now);
     expect((await tickWorkspace(services, workspaceId)).tasks).toBe(1);
   });
 });

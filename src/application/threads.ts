@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { emailFooter, isSuppressed, type Channel, type Interest } from "@/domain/sequences";
 import type { Database } from "@/infrastructure/db/client";
 import { outreach, signal } from "@/infrastructure/db/schema/connections";
-import { company, contactDetail, person, prospect, prospectList } from "@/infrastructure/db/schema/prospects";
+import { company, contactDetail, person, prospect, prospectList, whatsappConsent } from "@/infrastructure/db/schema/prospects";
 import { enrollment, sequence, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import { openConnection } from "./connections";
@@ -100,7 +100,7 @@ export async function threadOf(db: Database, workspaceId: string, prospectId: st
         personId: person.id,
         person: sql<string>`trim(coalesce(${person.firstName}, '') || ' ' || ${person.lastName})`,
         role: person.role,
-        consent: person.whatsappConsentAt,
+        consent: whatsappConsent.agreedAt,
         company: company.name,
         list: prospectList.name,
         state: prospect.state,
@@ -110,6 +110,7 @@ export async function threadOf(db: Database, workspaceId: string, prospectId: st
       .innerJoin(person, eq(person.id, prospect.personId))
       .innerJoin(company, eq(company.id, person.companyId))
       .innerJoin(prospectList, eq(prospectList.id, prospect.listId))
+      .leftJoin(whatsappConsent, eq(whatsappConsent.personId, person.id))
       .where(eq(prospect.id, prospectId));
     if (!row) return null;
     const out = await tx
@@ -151,7 +152,8 @@ export async function replyToProspect(services: Services, workspaceId: string, p
   if (!sender) return { ok: false, error: "Indiquez dans les Réglages le nom et l’adresse de l’expéditeur." };
   const context = await replyContext(services.db, workspaceId, prospectId);
   if (!context) return { ok: false, error: "Rien n’a encore été envoyé à cette personne par email." };
-  if (isSuppressed(context.address, context.suppressed)) return { ok: false, error: "Cette personne a demandé à ne plus être contactée." };
+  const { refused, bouncedHere, bouncedElsewhere } = context.suppressed;
+  if ([context.address, ...context.details].some((value) => isSuppressed(value, refused)) || isSuppressed(context.address, bouncedHere) || isSuppressed(context.address, bouncedElsewhere)) return { ok: false, error: "Cette personne a demandé à ne plus être contactée." };
   const opened = context.mailboxId ? await openConnection(services, workspaceId, context.mailboxId) : null;
   if (!opened?.client.sendEmail) return { ok: false, error: "La boîte de cette conversation n’est plus connectée." };
   const url = unsubscribeUrl(services.settings, workspaceId, context.address);
@@ -186,17 +188,19 @@ async function replyContext(db: Database, workspaceId: string, prospectId: strin
       .orderBy(asc(stepMessage.sentAt));
     const [address] = await tx.select({ value: outreach.address }).from(outreach).where(and(eq(outreach.enrollmentId, row.enrollmentId), eq(outreach.channel, "email")));
     if (!address || thread.length === 0) return null;
+    const details = await tx.select({ value: contactDetail.value }).from(contactDetail).where(eq(contactDetail.personId, row.personId));
     const subject = thread[0].subject ?? "Votre message";
-    return { ...row, address: address.value, subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`, references: thread.flatMap((item) => (item.messageId ? [item.messageId] : [])), suppressed: await suppressedIn(tx) };
+    return { ...row, address: address.value, subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`, references: thread.flatMap((item) => (item.messageId ? [item.messageId] : [])), suppressed: await suppressedIn(tx), details: details.map(({ value }) => value) };
   });
 }
 
-/** Someone agreed to WhatsApp messages, or took it back: only those who agreed get them through the Business API. */
+/** Someone agreed to this workspace's WhatsApp messages, or took it back: only those who agreed get them through the Business API. It says nothing of the directory's other workspaces. */
 export async function recordWhatsappConsent(db: Database, workspaceId: string, prospectId: string, agreed: boolean, now: Date): Promise<boolean> {
   return withWorkspace(db, workspaceId, async (tx) => {
     const [row] = await tx.select({ personId: prospect.personId }).from(prospect).where(eq(prospect.id, prospectId));
     if (!row) return false;
-    await tx.update(person).set({ whatsappConsentAt: agreed ? now : null }).where(eq(person.id, row.personId));
+    if (agreed) await tx.insert(whatsappConsent).values({ personId: row.personId, agreedAt: now }).onConflictDoUpdate({ target: [whatsappConsent.workspaceId, whatsappConsent.personId], set: { agreedAt: now } });
+    else await tx.delete(whatsappConsent).where(eq(whatsappConsent.personId, row.personId));
     return true;
   });
 }

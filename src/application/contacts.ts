@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import type { ContactFinding } from "@/domain/contacts";
+import { onePerDetail, type ContactFinding } from "@/domain/contacts";
 import { sha256 } from "@/infrastructure/crypto/secrets";
 import type { Database } from "@/infrastructure/db/client";
 import { crmPush } from "@/infrastructure/db/schema/connections";
@@ -7,9 +7,10 @@ import { company, contactDetail, person, prospect } from "@/infrastructure/db/sc
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import type { ContactPusher, CrmContact } from "./ports";
 import { openConnection } from "./connections";
+import { ownDetailsFirst } from "./directory";
 import type { Services } from "./services";
 
-/** Keeps a detail a member confirmed, with the page it was found on. False when the prospect isn't in this workspace. */
+/** Keeps a detail a member confirmed, with the page it was found on, for every workspace of the directory. False when the prospect isn't in this workspace. */
 export async function confirmContact(db: Database, workspaceId: string, prospectId: string, finding: ContactFinding): Promise<boolean> {
   return withWorkspace(db, workspaceId, async (tx) => {
     const [found] = await tx.select({ personId: prospect.personId }).from(prospect).where(eq(prospect.id, prospectId));
@@ -19,10 +20,10 @@ export async function confirmContact(db: Database, workspaceId: string, prospect
   });
 }
 
-/** How to reach each of these people, with where it came from. */
+/** How to reach each of these people, with where it came from: what the directory found, and what this workspace brought itself. */
 export async function contactsOf(db: Database, workspaceId: string, personIds: readonly string[]) {
   if (personIds.length === 0) return [];
-  return withWorkspace(db, workspaceId, (tx) => tx.select({ personId: contactDetail.personId, kind: contactDetail.kind, value: contactDetail.value, page: contactDetail.page, source: contactDetail.source }).from(contactDetail).where(inArray(contactDetail.personId, [...personIds])));
+  return onePerDetail(await withWorkspace(db, workspaceId, (tx) => tx.select({ personId: contactDetail.personId, kind: contactDetail.kind, value: contactDetail.value, page: contactDetail.page, source: contactDetail.source }).from(contactDetail).where(inArray(contactDetail.personId, [...personIds])).orderBy(...ownDetailsFirst)));
 }
 
 /** What a CRM needs to know about a prospect, from what the workspace holds. */
@@ -35,7 +36,7 @@ async function crmContactOf(db: Database, workspaceId: string, prospectId: strin
       .innerJoin(company, eq(company.id, person.companyId))
       .where(eq(prospect.id, prospectId));
     if (!row) return null;
-    const details = await tx.select({ kind: contactDetail.kind, value: contactDetail.value }).from(contactDetail).where(and(eq(contactDetail.personId, row.personId), inArray(contactDetail.kind, ["email", "phone"])));
+    const details = await tx.select({ kind: contactDetail.kind, value: contactDetail.value }).from(contactDetail).where(and(eq(contactDetail.personId, row.personId), inArray(contactDetail.kind, ["email", "phone"]))).orderBy(...ownDetailsFirst);
     const valueOf = (kind: string) => details.find((detail) => detail.kind === kind)?.value ?? null;
     return { firstName: row.firstName, lastName: row.lastName, email: valueOf("email"), phone: valueOf("phone"), role: row.role, company: { name: row.company, siren: row.siren, website: row.website }, note };
   });
