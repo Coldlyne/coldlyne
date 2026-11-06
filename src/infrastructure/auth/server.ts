@@ -11,7 +11,7 @@ import { SIGN_UP_REFUSED } from "@/domain/sign-up";
 import { db, schema, type Database } from "../db/client";
 import { env, type Env } from "../env";
 import { sendOwnMail } from "../mail/own-mail";
-import { accountMail, companyLogin, mayJoin, passwordSignUpRefusal, signInOf } from "./sign-in";
+import { accountMail, companyLogin, mayCreatePasswordAccount, mayJoin, passwordSignUpClosed, signInOf } from "./sign-in";
 
 /** The MCP server's address: the only audience the assistants' tokens are good for. */
 export const mcpResource = (settings: Pick<Env, "BETTER_AUTH_URL">) => new URL("/api/mcp", settings.BETTER_AUTH_URL).toString();
@@ -55,15 +55,18 @@ export function createAuth(database: Database, settings: Env) {
       sendVerificationEmail: async ({ user, url }) => void (await mail(user.email, accountMail.confirm(url))),
     },
     rateLimit: { storage: "database" },
+    // Sealed from now on; a row stored before reads as it stands, and is sealed when that person next signs in through their provider.
+    account: { encryptOAuthTokens: true },
     databaseHooks: {
       user: {
         create: {
           before: async (user, context) => {
             const invited = await hasLiveInvitation(database, user.email, new Date());
             if (context?.path === PASSWORD_SIGN_UP) {
-              const refusal = passwordSignUpRefusal(user.email, settings, invited);
-              // Not a 403: Better Auth answers one here with a pretend success, and they'd wait for a mail that never comes.
-              if (refusal) throw new APIError("UNPROCESSABLE_ENTITY", { message: refusal, code: SIGN_UP_REFUSED });
+              const closed = passwordSignUpClosed(settings);
+              if (closed) throw new APIError("UNPROCESSABLE_ENTITY", { message: closed, code: SIGN_UP_REFUSED });
+              // A 403: Better Auth then answers as it does for an address it already knows, so the answer can't be used to find out who is invited or an admin.
+              if (!mayCreatePasswordAccount(user.email, invited)) throw new APIError("FORBIDDEN");
               return;
             }
             // False rather than an error: the provider's callback then sends the person back to the sign-in page.

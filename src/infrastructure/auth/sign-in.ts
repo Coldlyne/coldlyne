@@ -32,14 +32,11 @@ export function signInOf(settings: SignInSettings): SignInMethods {
  */
 export const mayJoin = (person: { email: string; emailVerified?: boolean | null }, invited = false) => person.emailVerified === true && (invited || isAdmin(person.email));
 
-const CLOSED = "Coldlyne n’est ouvert qu’aux personnes invitées pour le moment.";
+/** Whether an account may be created with a password at this address. It isn't proved yet: the link mailed afterwards proves it, and sign-in stays closed until then. */
+export const mayCreatePasswordAccount = (email: string, invited = false) => invited || isAdmin(email);
 
-/**
- * Why an account can't be created with a password, if it can't. The address isn't proved yet: the
- * link mailed afterwards proves it and sign-in stays closed until then, so without mail nobody could ever get in.
- */
-export function passwordSignUpRefusal(email: string, settings: Pick<Env, "RESEND_API_KEY">, invited = false): string | null {
-  if (!invited && !isAdmin(email)) return CLOSED;
+/** Why no account can be created with a password right now, if so: without mail nobody could ever get in. It's said to anyone, since it doesn't depend on the address. */
+export function passwordSignUpClosed(settings: Pick<Env, "RESEND_API_KEY">): string | null {
   return settings.RESEND_API_KEY ? null : "Coldlyne ne peut pas encore envoyer le lien de confirmation : réessayez plus tard.";
 }
 

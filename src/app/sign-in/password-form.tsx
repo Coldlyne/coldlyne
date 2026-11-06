@@ -52,7 +52,7 @@ export function PasswordForm({ next }: { next: string }) {
     const refused = await ask(email, password, name);
     setBusy(false);
     if (refused) return setError(wordsFor(refused));
-    if (mode === "sign-up") setSent(`Un lien de confirmation vient de partir à ${email} : ouvrez-le pour activer votre compte.`);
+    if (mode === "sign-up") setSent(`Si ${email} peut rejoindre Coldlyne, un lien de confirmation vient d’y partir : ouvrez-le pour activer votre compte. Il faut y avoir été invité.`);
     if (mode === "forgot") setSent(`Si ${email} a un compte, un lien vient d’y partir pour choisir un nouveau mot de passe.`);
   }
 

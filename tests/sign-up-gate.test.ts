@@ -1,3 +1,4 @@
+import { decryptOAuthToken, setTokenUtil } from "better-auth/oauth2";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { inviteToWorkspace } from "@/application/invitations";
 import type { Services } from "@/application/services";
@@ -67,12 +68,17 @@ async function invite(email: string) {
 }
 
 describe("signing up with a password", () => {
-  it("refuses a stranger with a 422 the form can read, since a 403 here would pretend to succeed", async () => {
-    const response = await signUp("stranger@example.com");
-    expect(response.status).toBe(422);
-    expect(await response.json()).toMatchObject({ code: SIGN_UP_REFUSED, message: expect.stringContaining("invitées") });
+  it("answers a stranger as it answers someone who may join, so the answer says nothing about either, and creates nothing", async () => {
+    await invite("may-join@example.com");
+    const stranger = await signUp("stranger@example.com");
+    const allowed = await signUp("may-join@example.com");
+    expect(stranger.status).toBe(allowed.status);
+    expect(stranger.status).toBe(200);
+    const [theirs, ours] = [await stranger.json(), await allowed.json()];
+    expect(Object.keys(theirs).sort()).toEqual(Object.keys(ours).sort());
+    expect(Object.keys(theirs.user).sort()).toEqual(Object.keys(ours.user).sort());
     expect(await accounts("stranger@example.com")).toEqual([]);
-    expect(mail.calls).toEqual([]);
+    await vi.waitFor(() => expect(mail.calls.map(({ body }) => JSON.parse(body).to[0])).toEqual(["may-join@example.com"]));
   });
 
   it("lets an address with a live invitation get an account, unproved until the mailed link", async () => {
@@ -96,19 +102,25 @@ describe("signing up with a password", () => {
     const seat = await createTestWorkspace(db);
     const stale = { ...services, now: () => new Date(Date.now() - 15 * 86_400_000) };
     await inviteToWorkspace(stale, seat.workspaceId, seat.userId, "stale@example.com", "member");
-    expect((await signUp("stale@example.com")).status).toBe(422);
+    expect((await signUp("stale@example.com")).status).toBe(200);
+    expect(await accounts("stale@example.com")).toEqual([]);
+    expect(mail.calls).toEqual([]);
   });
 
   it("still lets the instance's admins in, with no invitation", async () => {
     expect((await signUp("founder@example.com")).status).toBe(200);
   });
 
-  it("refuses an invited address when no mail could prove it, as for anyone", async () => {
+  it("says the same to everyone when no mail could prove an address, invited or not", async () => {
     await invite("nomail@example.com");
     const without = createAuth(db, { ...settings, RESEND_API_KEY: undefined });
-    const response = await without.handler(new Request(`${BASE}/api/auth/sign-up/email`, { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ email: "nomail@example.com", password: PASSWORD, name: "Bea" }) }));
-    expect(response.status).toBe(422);
-    expect(await response.json()).toMatchObject({ message: expect.stringContaining("lien de confirmation") });
+    const answerTo = (email: string) => without.handler(new Request(`${BASE}/api/auth/sign-up/email`, { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ email, password: PASSWORD, name: "Bea" }) }));
+    for (const email of ["nomail@example.com", "nobody-invited@example.com"]) {
+      const response = await answerTo(email);
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ code: SIGN_UP_REFUSED, message: expect.stringContaining("lien de confirmation") });
+      expect(await accounts(email)).toEqual([]);
+    }
   });
 });
 
@@ -129,5 +141,18 @@ describe("arriving through an identity provider", () => {
   it("refuses a verified stranger, and lets an admin through", async () => {
     expect(await gate("stranger@example.com", true)).toBe(false);
     expect(await gate("founder@example.com", true)).toBeUndefined();
+  });
+});
+
+describe("the tokens a provider gives at sign-in", () => {
+  it("are sealed before they're kept, and read back", async () => {
+    const context = (await auth.$context) as never;
+    const sealed = await setTokenUtil("ya29.a-provider-token", context);
+    expect(sealed).not.toContain("a-provider-token");
+    expect(await decryptOAuthToken(sealed as string, context)).toBe("ya29.a-provider-token");
+  });
+
+  it("still read when a row was stored before they were sealed", async () => {
+    expect(await decryptOAuthToken("ya29.stored-in-clear", (await auth.$context) as never)).toBe("ya29.stored-in-clear");
   });
 });
