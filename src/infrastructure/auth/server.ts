@@ -19,12 +19,13 @@ export const mcpResource = (settings: Pick<Env, "BETTER_AUTH_URL">) => new URL("
 const PASSWORD_SIGN_UP = "/sign-up/email";
 
 /**
- * How long, in seconds, a refresh token just replaced still gets the same answer. An assistant can lose
- * that answer, when its token store fails a write, and present the old token again. With no grace that
- * reads as a stolen token: the connection's tokens are all deleted and the member has to approve it
- * again. Any later than this, it still does.
+ * How long, in seconds, a refresh token just replaced still gets the same answer. Assistant sessions
+ * on one machine share a connection: when one renews it, another may present the old token up to an
+ * access token's life later, and a token store can fail a write. With no grace that reads as a stolen
+ * token: the connection's tokens are all deleted and the member has to approve it again. Any later
+ * than this, it still does.
  */
-const REFRESH_TOKEN_GRACE = 60;
+const REFRESH_TOKEN_GRACE = 7200;
 
 /**
  * Members sign in with the company's identity provider when the instance has one, otherwise with
