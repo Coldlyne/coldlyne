@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectWithFields } from "@/application/connections";
 import { confirmContact } from "@/application/contacts";
@@ -6,8 +7,9 @@ import { figuresOf } from "@/application/figures";
 import { addFromRegistry, createList, prospectsOf } from "@/application/prospects";
 import { tickWorkspace } from "@/application/scheduler";
 import { createSequence, launchSequence, type StepInput } from "@/application/sequences";
+import type { Signal } from "@/application/ports";
 import type { Services } from "@/application/services";
-import { recordSignals } from "@/application/signals";
+import { recordOutreach, recordSignals } from "@/application/signals";
 import { completeTask, leaveVoicemail, placeTaskCall, tasksOf } from "@/application/tasks";
 import { conversationsOf, recordReplyByHand, recordWhatsappConsent, replyToProspect, setInterest, threadOf } from "@/application/threads";
 import { createWatchlist, deleteWatchlist, runAllWatchlists, runWatchlist, watchlistsOf } from "@/application/watchlists";
@@ -327,6 +329,69 @@ describe("the figures", () => {
     expect(figures.steps).toContainEqual({ sequence: "Holdings", position: 0, channel: "email", status: "sent", count: 1 });
     expect(figures.people.reduce((total, row) => total + row.count, 0)).toBe(1);
     expect(figures.sent).toEqual([{ day: "2026-11-09", channel: "email", count: 1 }]);
+  });
+
+  it("name the workspace they are of", async () => {
+    const { workspaceId } = await campaign([EMAIL]);
+    expect((await figuresOf(db, workspaceId, MONDAY)).workspace).toEqual({ id: workspaceId, name: "Northwind" });
+  });
+
+  /** A second sequence of the same workspace, on the same person, with one email sent from it an hour later. */
+  async function writtenAgain(workspaceId: string, userId: string, prospectId: string, messageId: string) {
+    const second = await createSequence(services, workspaceId, userId, { name: "Relance", steps: [EMAIL] });
+    if (!second.ok) throw new Error(second.error);
+    await enroll(db, workspaceId, second.id, [prospectId], now);
+    const [joined] = await withWorkspace(db, workspaceId, (tx) => tx.select({ id: enrollment.id }).from(enrollment).where(eq(enrollment.sequenceId, second.id)));
+    await recordOutreach(db, workspaceId, { connectionId: null, channel: "email", address: "jeanne@acme.fr", messageId, enrollmentId: joined.id, at: new Date(now.getTime() + 3_600_000) });
+  }
+
+  const signalAt = (externalId: string, overrides: Partial<Signal>): Signal => ({ type: "replied", channel: "email", externalId, address: "jeanne@acme.fr", at: new Date(now.getTime() + 7_200_000), ...overrides });
+
+  it("say per day what each sequence sent, leaving out what wasn't on a sequence", async () => {
+    const { workspaceId, userId, prospectId } = await campaign([EMAIL]);
+    await tickWorkspace(services, workspaceId);
+    await writtenAgain(workspaceId, userId, prospectId, "<second@acme>");
+    await recordOutreach(db, workspaceId, { connectionId: null, channel: "email", address: "test@acme.fr", at: now });
+    const { daily } = await figuresOf(db, workspaceId, new Date(now.getTime() - 1000));
+    expect(daily.sent).toEqual([
+      { day: "2026-11-09", sequence: "Holdings", channel: "email", count: 1 },
+      { day: "2026-11-09", sequence: "Relance", channel: "email", count: 1 },
+    ]);
+  });
+
+  it("count what came back once, for the sequence that wrote the message it answers, else the last to write to that address", async () => {
+    const { workspaceId, userId, prospectId } = await campaign([EMAIL]);
+    await tickWorkspace(services, workspaceId);
+    await writtenAgain(workspaceId, userId, prospectId, "<second@acme>");
+    await recordSignals(db, workspaceId, null, [signalAt("a", { inReplyTo: "<m1@acme>" }), signalAt("b", { type: "bounced" }), signalAt("c", { type: "opted_out", address: "stranger@acme.fr" })]);
+    const { daily } = await figuresOf(db, workspaceId, new Date(now.getTime() - 1000));
+    expect(daily.signals).toEqual(
+      expect.arrayContaining([
+        { day: "2026-11-09", sequence: "Holdings", channel: "email", type: "replied", count: 1 },
+        { day: "2026-11-09", sequence: "Relance", channel: "email", type: "bounced", count: 1 },
+        { day: "2026-11-09", sequence: null, channel: "email", type: "opted_out", count: 1 },
+      ]),
+    );
+    expect(daily.signals).toHaveLength(3);
+  });
+
+  it("say per day who joined each list and what replies came to, by name of list and sequence only", async () => {
+    const { workspaceId, prospectId, userId } = await campaign([EMAIL]);
+    await tickWorkspace(services, workspaceId);
+    await writtenAgain(workspaceId, userId, prospectId, "<second@acme>");
+    await setInterest(db, workspaceId, prospectId, "interested");
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
+    const { daily } = await figuresOf(db, workspaceId, new Date(Date.now() - 86_400_000));
+    expect(daily.prospects).toEqual([{ day: today, list: "Holdings", count: 1 }]);
+    expect(daily.interest).toEqual([{ day: today, sequence: "Relance", interest: "interested", count: 1 }]);
+    expect(JSON.stringify(daily)).not.toContain("jeanne");
+  });
+
+  it("leave out what came before the date asked", async () => {
+    const { workspaceId, prospectId } = await campaign([EMAIL]);
+    await tickWorkspace(services, workspaceId);
+    await setInterest(db, workspaceId, prospectId, "interested");
+    expect((await figuresOf(db, workspaceId, new Date(Math.max(Date.now(), now.getTime()) + 86_400_000))).daily).toEqual({ prospects: [], sent: [], signals: [], interest: [] });
   });
 });
 
