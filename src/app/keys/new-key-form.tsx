@@ -2,11 +2,11 @@
 
 import { useActionState } from "react";
 import { Code, INLINE_FIELD, PrimaryButton } from "@/components/ui";
-import { createKeyAction } from "./actions";
+import { createKeyAction, type NewKeyState } from "./actions";
 
 /** Names a key and shows it, this once. */
 export function NewKeyForm() {
-  const [state, submit, pending] = useActionState(createKeyAction, {});
+  const [state, submit, pending] = useActionState<NewKeyState, FormData>(createKeyAction, {});
   return (
     <form action={submit} className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-3">
@@ -15,6 +15,7 @@ export function NewKeyForm() {
           Créer une clé
         </PrimaryButton>
       </div>
+      {state.error && <p className="text-sm text-ember">{state.error}</p>}
       {state.key && (
         <div>
           <p className="mb-2 text-sm text-muted-foreground">Copiez-la maintenant : elle ne s’affichera plus.</p>

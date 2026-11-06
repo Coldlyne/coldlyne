@@ -240,7 +240,9 @@ describe("reading what arrived", () => {
 describe("keys other apps read figures with", () => {
   it("shows a key once, keeps its hash, finds its workspace and stops at revocation", async () => {
     const { workspaceId, userId } = await createTestWorkspace(db);
-    const { id, key } = await createApiKey(db, workspaceId, userId, "Tableau de bord");
+    const made = await createApiKey(db, workspaceId, userId, "Tableau de bord");
+    if (!made.ok) throw new Error(made.error);
+    const { id, key } = made;
     expect(key.startsWith("cl_")).toBe(true);
     expect(await workspaceOfKey(db, key)).toBe(workspaceId);
     expect(await workspaceOfKey(db, "cl_wrong")).toBeNull();
@@ -250,7 +252,7 @@ describe("keys other apps read figures with", () => {
     expect(listed).toMatchObject({ name: "Tableau de bord", prefix: key.slice(0, 10) });
     expect(listed.lastUsedAt).not.toBeNull();
     expect(JSON.stringify(listed)).not.toContain(key);
-    expect(await revokeApiKey(db, workspaceId, id)).toBe(true);
+    expect(await revokeApiKey(db, workspaceId, userId, id)).toMatchObject({ ok: true });
     expect(await workspaceOfKey(db, key)).toBeNull();
   });
 

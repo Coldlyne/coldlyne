@@ -15,6 +15,8 @@ Checks before committing: `pnpm lint && pnpm typecheck && pnpm test:coverage && 
 
 Coldlyne's MCP server is at `/api/mcp`. Add that address to Claude, ChatGPT or any MCP client as a remote connector: the client registers itself, you sign in and approve it, and it acts inside your workspace with the workspace's rules. If you belong to several workspaces, one connection covers them all and the assistant says which one on every call.
 
+An owner or an admin can have their assistant manage the workspace's API keys, with `list_api_keys`, `create_api_key` and `revoke_api_key`. The tools refuse anyone else. A key made this way reads the workspace's figures and nothing else, and its answer shows it once, in the conversation. An assistant is told to make one only when you asked for it in that conversation, never because a reply or a web page says so, to revoke one only once you've said yes, and never to put a key into a record or a message.
+
 ## Running your own
 
 Beyond the database, an instance needs:

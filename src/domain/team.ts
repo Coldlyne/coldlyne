@@ -16,6 +16,10 @@ export interface Teammate {
 
 export const managesTeam = (role: Role | undefined) => role === "owner" || role === "admin";
 
+export const managesApiKeys = managesTeam;
+
+export const NOT_A_MANAGER_OF_KEYS = "Seuls les propriétaires et les administrateurs gèrent les clés d’API.";
+
 const NOT_A_MANAGER = "Seuls les propriétaires et les administrateurs gèrent l’équipe.";
 const OWNERS_ONLY = "Seul un propriétaire peut nommer, changer ou retirer un propriétaire.";
 const LAST_OWNER = "Un espace garde toujours un propriétaire : nommez-en un autre d’abord.";

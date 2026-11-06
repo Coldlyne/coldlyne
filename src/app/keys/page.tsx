@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { apiKeysOf } from "@/application/api-keys";
 import { Loading, PageHeading, Shell } from "@/components/shell";
 import { Card, Code, Eyebrow, QuietButton, Rows } from "@/components/ui";
+import { managesApiKeys } from "@/domain/team";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { db } from "@/infrastructure/db/client";
 import { env } from "@/infrastructure/env";
@@ -17,10 +18,11 @@ const day = new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeZone: "E
 async function Keys() {
   const seat = await currentSeat();
   const keys = await apiKeysOf(db(), seat.workspaceId);
+  const mayChange = managesApiKeys(seat.role);
   return (
     <div className="space-y-4">
       <Card>
-        <NewKeyForm />
+        {mayChange ? <NewKeyForm /> : <p className="text-sm text-muted-foreground">Seuls les propriétaires et les administrateurs créent des clés.</p>}
         <p className="mt-5 text-sm text-muted-foreground">Les chiffres de l’espace, sans aucun nom ni adresse :</p>
         <div className="mt-2">
           <Code>GET {new URL("/api/v1/figures?days=30", env().BETTER_AUTH_URL).toString()}</Code>
@@ -33,9 +35,11 @@ async function Keys() {
               <span className="font-medium">{key.name}</span>
               <span className="font-mono text-xs text-muted-foreground">{key.prefix}…</span>
               <span className="ml-auto text-xs text-muted-foreground">{key.lastUsedAt ? `Utilisée le ${day.format(key.lastUsedAt)}` : "Jamais utilisée"}</span>
-              <form action={revokeKeyAction.bind(null, key.id)}>
-                <QuietButton type="submit">Révoquer</QuietButton>
-              </form>
+              {mayChange && (
+                <form action={revokeKeyAction.bind(null, key.id)}>
+                  <QuietButton type="submit">Révoquer</QuietButton>
+                </form>
+              )}
             </li>
           ))}
         </Rows>
