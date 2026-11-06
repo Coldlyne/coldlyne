@@ -27,7 +27,7 @@ export const prospectTools: ToolRegistrar = (server, context) => {
     {
       title: "Search the French company registry",
       description:
-        "Active French companies by activity code (NAF, e.g. 64.20Z for holdings), legal form (5710 SAS, 5720 SASU, 5499 SARL, 5498 EURL), department, postcode, headcount band or words, with their directors. 25 a page. Companies that refused commercial use of their data are marked and can't be added.",
+        "Active French companies by activity code (NAF, e.g. 64.20Z for holdings), legal form (5710 SAS, 5499 SARL; the registry refuses 5720 and 5498, so SASU and EURL can't be asked for apart), department, postcode, headcount band or words, with their directors. 25 a page. Companies that refused commercial use of their data are marked and can't be added.",
       inputSchema: z.object({
         activities: z.array(z.string()).optional(),
         legalForms: z.array(z.string()).optional(),

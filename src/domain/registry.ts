@@ -6,7 +6,7 @@
 export interface RegistryCompany {
   siren: string;
   name: string;
-  /** The legal form's code: 5710 SAS, 5720 SASU, 5499 SARL, 5498 EURL, 6540 SCI… */
+  /** The legal form's code: 5710 SAS, 5499 SARL, 6540 SCI… The registry refuses 5720 (SASU) and 5498 (EURL) as filters. */
   legalForm: string | null;
   /** The activity's NAF code: 64.20Z for holdings. */
   activity: string | null;
@@ -46,7 +46,8 @@ export interface RegistryApiCompany {
 export function fromRegistry(raw: RegistryApiCompany): RegistryCompany {
   return {
     siren: raw.siren,
-    name: raw.nom_complet ?? raw.nom_raison_sociale ?? raw.siren,
+    // nom_complet adds the acronym, "ACME (ACME)", which would then be written to people as the company's name.
+    name: raw.nom_raison_sociale ?? raw.nom_complet ?? raw.siren,
     legalForm: raw.nature_juridique ?? null,
     activity: raw.activite_principale ?? null,
     street: [raw.siege?.numero_voie, raw.siege?.type_voie, raw.siege?.libelle_voie].filter(Boolean).join(" ") || null,

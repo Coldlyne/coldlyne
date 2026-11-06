@@ -86,8 +86,8 @@ async function Content() {
               <Labelled label="Codes d’activité (NAF)" hint="64.20Z pour les holdings.">
                 <input name="activities" placeholder="64.20Z" className={FIELD} />
               </Labelled>
-              <Labelled label="Formes juridiques" hint="5710 pour une SAS, 5720 pour une SASU.">
-                <input name="legalForms" placeholder="5710, 5720" className={FIELD} />
+              <Labelled label="Formes juridiques" hint="5710 pour une SAS, 5499 pour une SARL.">
+                <input name="legalForms" placeholder="5710, 5499" className={FIELD} />
               </Labelled>
             </div>
             <Labelled label="Liste où les ajouter">

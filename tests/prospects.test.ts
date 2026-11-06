@@ -54,3 +54,13 @@ describe("workspaces", () => {
     expect((seen as unknown as { rows: { count: number }[] }).rows[0].count).toBe(0);
   });
 });
+
+describe("a company's name from the registry", () => {
+  it("is its legal name, without the acronym the registry adds for display", () => {
+    expect(fromRegistry(holding("900000001", { nom_complet: "ACME (ACME)", nom_raison_sociale: "ACME" })).name).toBe("ACME");
+  });
+
+  it("falls back on the display name for someone trading in their own name", () => {
+    expect(fromRegistry(holding("900000002", { nom_complet: "ADA MARTIN", nom_raison_sociale: null })).name).toBe("ADA MARTIN");
+  });
+});
