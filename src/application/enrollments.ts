@@ -300,8 +300,13 @@ export async function reactToSignals(tx: Database, signals: readonly Signal[]): 
   }
 }
 
-/** Everyone waiting for a step whose time has come, on running sequences, the longest waiting first. */
+/**
+ * Everyone waiting for a step whose time has come, on running sequences, each sequence and mailbox in
+ * turn, the longest waiting first within each. Those who can't go on for now (a paused mailbox, a closed
+ * window) keep their place, so going by age alone they would fill the run and starve everyone behind them.
+ */
 export async function dueEnrollments(tx: Database, now: Date, limit = 300) {
+  const turn = sql`row_number() over (partition by ${enrollment.sequenceId}, ${enrollment.mailboxId} order by ${enrollment.nextDueAt})`;
   return tx
     .select({
       id: enrollment.id,
@@ -316,7 +321,7 @@ export async function dueEnrollments(tx: Database, now: Date, limit = 300) {
     .from(enrollment)
     .innerJoin(sequence, eq(sequence.id, enrollment.sequenceId))
     .where(and(eq(sequence.status, "running"), eq(enrollment.status, "active"), sql`${enrollment.nextDueAt} <= ${now.toISOString()}::timestamptz`))
-    .orderBy(asc(enrollment.nextDueAt))
+    .orderBy(turn, asc(enrollment.nextDueAt))
     .limit(limit);
 }
 

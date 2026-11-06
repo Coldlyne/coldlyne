@@ -1,5 +1,6 @@
 import type { Check } from "@/application/ports";
 import { ProviderError } from "../http";
+import { withoutSecrets } from "../without-secrets";
 
 /** The mailbox a connection sends from and reads. */
 export interface Mailbox {
@@ -20,6 +21,6 @@ export async function checkMailbox(provider: string, proveAddress: () => Promise
     const address = (await proveAddress()).toLowerCase();
     return { ok: true, detail: `boîte ${address}`, label: address };
   } catch (error) {
-    return { ok: false, detail: error instanceof ProviderError ? error.message : `Impossible de vérifier ${provider}\u00a0: ${(error as Error).message}` };
+    return { ok: false, detail: error instanceof ProviderError ? error.message : `Impossible de vérifier ${provider}\u00a0: ${withoutSecrets((error as Error).message)}` };
   }
 }

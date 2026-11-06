@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import type { Capability } from "@/domain/connectors";
 import { ProviderError } from "@/infrastructure/connectors/http";
+import { withoutSecrets } from "@/infrastructure/connectors/without-secrets";
 import { sameSecret } from "@/infrastructure/crypto/secrets";
 import { user } from "@/infrastructure/db/schema/auth";
 import { connection, outreach, signal } from "@/infrastructure/db/schema/connections";
@@ -82,7 +83,7 @@ function notificationOf(services: Services, found: Signal): Notification[] {
   return [{ event, title, text: found.detail ?? "", url: new URL("/signals", services.settings.BETTER_AUTH_URL).toString() }];
 }
 
-const reasonOf = (error: unknown) => (error instanceof Error ? error.message : "Le service n’a pas répondu.");
+const reasonOf = (error: unknown) => (error instanceof Error ? withoutSecrets(error.message) : "Le service n’a pas répondu.");
 
 /** Marks a connection as failing and, the first time it fails, tells the member who connected it. */
 export async function markFailing(services: Services, workspaceId: string, connectionId: string, error: unknown) {
@@ -173,6 +174,22 @@ export async function syncConnection(services: Services, workspaceId: string, op
 export async function workspacesToSync(db: Database): Promise<string[]> {
   const rows = await db.selectDistinct({ workspaceId: connection.workspaceId }).from(connection).where(eq(connection.status, "connected"));
   return rows.map((row) => row.workspaceId);
+}
+
+/** The scheduled read, over every workspace. One workspace's trouble is none of the others'. */
+export async function syncEveryWorkspace(services: Services): Promise<{ workspaces: number; added: number; failed: number }> {
+  const workspaces = await workspacesToSync(services.db);
+  let added = 0;
+  let failed = 0;
+  for (const workspaceId of workspaces) {
+    try {
+      added += (await syncWorkspace(services, workspaceId)).added;
+    } catch (error) {
+      failed += 1;
+      console.error("The sync failed on a workspace", workspaceId, reasonOf(error));
+    }
+  }
+  return { workspaces: workspaces.length, added, failed };
 }
 
 export interface SignalView {

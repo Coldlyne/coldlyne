@@ -2,6 +2,7 @@ import type { InboundRequest, Signal } from "@/application/ports";
 import { ProviderError } from "../http";
 import { e164 } from "../phone";
 import { forgedWebhook, hmac, sameSecret, unixDate } from "../webhooks";
+import { withoutSecrets } from "../without-secrets";
 
 /**
  * What Meta posts about a WhatsApp number: its handshake, and messages and statuses once signed.
@@ -98,6 +99,11 @@ function incomingSignal(message: IncomingMessage, now: Date): Signal | null {
   };
 }
 
+function reasonOf(error: { message?: string; title?: string } | undefined): string | undefined {
+  const reason = error?.message ?? error?.title;
+  return reason ? withoutSecrets(reason) : undefined;
+}
+
 function statusSignal(status: MessageStatus, now: Date): Signal | null {
   if (status.status !== "delivered" && status.status !== "failed") return null;
   const error = status.errors?.[0];
@@ -108,7 +114,7 @@ function statusSignal(status: MessageStatus, now: Date): Signal | null {
     externalId: `${status.id}:${status.status}`,
     address: e164(status.recipient_id),
     at: unixDate(status.timestamp, now),
-    detail: error?.message ?? error?.title,
+    detail: reasonOf(error),
   };
 }
 

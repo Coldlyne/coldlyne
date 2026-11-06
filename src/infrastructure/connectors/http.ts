@@ -1,7 +1,9 @@
+import { withoutSecrets } from "./without-secrets";
+
 /**
  * Calls to providers' APIs, with their failures said in the member's words: a refused key, a
  * quota reached, a provider down. The provider's own message is kept, since it usually says
- * which field is wrong.
+ * which field is wrong, without anything that reads like a credential.
  */
 export class ProviderError extends Error {
   constructor(
@@ -35,6 +37,16 @@ function messageIn(body: string): string | undefined {
   }
 }
 
+const SECRET_HEADER = /auth|key|token|secret/i;
+const SHORTEST_SECRET = 8;
+
+/** What this request carried that a service might quote back: its credentials, and what its address asks with. */
+function secretsSent(url: string, init: RequestInit): string[] {
+  const inHeaders = [...new Headers(init.headers)].filter(([name]) => SECRET_HEADER.test(name)).map(([, value]) => value.split(" ").at(-1) as string);
+  const inAddress = URL.canParse(url) ? [...new URL(url).searchParams.values()] : [];
+  return [...inHeaders, ...inAddress].filter((value) => value.length >= SHORTEST_SECRET);
+}
+
 /** Sends the request and reads the answer as text, for services that don't answer JSON; throws a ProviderError on anything but 2xx. */
 export async function requestText(fetchUrl: typeof fetch, provider: string, url: string, init: RequestInit = {}): Promise<string> {
   const response = await fetchUrl(url, init);
@@ -42,7 +54,7 @@ export async function requestText(fetchUrl: typeof fetch, provider: string, url:
   if (!response.ok) {
     const why = WHY[response.status] ?? (response.status >= 500 ? "ne répond pas correctement pour le moment" : `a répondu ${response.status}`);
     const detail = messageIn(body);
-    throw new ProviderError(provider, response.status, `${provider} ${why}${detail ? ` : ${detail}` : "."}`);
+    throw new ProviderError(provider, response.status, `${provider} ${why}${detail ? ` : ${withoutSecrets(detail, secretsSent(url, init))}` : "."}`);
   }
   return body;
 }

@@ -31,6 +31,7 @@ import { enrollment, sequence, sequenceStep, stepMessage } from "@/infrastructur
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import type { Database } from "@/infrastructure/db/client";
 import { ProviderError } from "@/infrastructure/connectors/http";
+import { withoutSecrets } from "@/infrastructure/connectors/without-secrets";
 import { scheduledWorkChanged } from "@/infrastructure/scheduling/scheduled-work";
 import { connectionsWith, openConnection, type OpenedConnection } from "./connections";
 import { ownDetailsFirst } from "./directory";
@@ -163,8 +164,29 @@ export async function tickWorkspace(services: Services, workspaceId: string): Pr
   await loadSequences(tick, first);
   await prepareConnections(tick, first);
   const due = await withWorkspace(services.db, workspaceId, (tx) => dueEnrollments(tx, now));
-  for (const row of due) await process(tick, row);
+  for (const row of due) await takeTurn(tick, row);
   return result;
+}
+
+/** One person's trouble is no one else's: the others still get their turn, and this one goes behind them for a while rather than first again on the next run. */
+async function takeTurn(tick: Tick, due: DueEnrollment) {
+  try {
+    await process(tick, due);
+  } catch (error) {
+    console.error("The scheduler failed on someone's turn", due.id, error instanceof Error ? error.message : error);
+    tick.result.failed += 1;
+    await withWorkspace(tick.services.db, tick.workspaceId, (tx) => tx.update(enrollment).set({ nextDueAt: new Date(tick.now.getTime() + HOUR_MS) }).where(and(eq(enrollment.id, due.id), eq(enrollment.status, "active")))).catch(() => undefined);
+  }
+}
+
+/** A connection that can't even be opened is left out of this run: whoever needs it waits, and the others go on. */
+async function openForThisRun(tick: Tick, id: string): Promise<OpenedConnection | null> {
+  try {
+    return await openConnection(tick.services, tick.workspaceId, id);
+  } catch (error) {
+    console.error("The scheduler couldn't open a connection", id, error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 /** A send that never reported back may or may not have left: a person decides, rather than risk writing twice. */
@@ -197,11 +219,11 @@ async function prepareConnections(tick: Tick, due: readonly DueEnrollment[]) {
     if (found.channels.sms) others.add(found.channels.sms);
   }
   for (const id of [...mailboxes, ...others]) {
-    const opened = await openConnection(tick.services, tick.workspaceId, id);
+    const opened = await openForThisRun(tick, id);
     if (opened?.client.signalsSince && opened.row.status === "connected") await syncConnection(tick.services, tick.workspaceId, opened);
   }
   for (const id of mailboxes) {
-    const opened = await openConnection(tick.services, tick.workspaceId, id);
+    const opened = await openForThisRun(tick, id);
     if (!opened?.client.sendEmail) continue;
     await pauseIfHurting(tick, opened);
     const leftToday = await leftTodayOf(tick, opened);
@@ -535,7 +557,7 @@ async function recordSent(tick: Tick, due: DueEnrollment, step: StepRow, message
 /** A refused key is the connection's problem; anything else may pass. Three tries, then a person looks. */
 async function recordFailure(tick: Tick, due: DueEnrollment, message: MessageRow, connectionId: string, attempts: number, error: unknown) {
   const { services, workspaceId } = tick;
-  const note = error instanceof Error ? error.message : "Le service n’a pas répondu.";
+  const note = error instanceof Error ? withoutSecrets(error.message) : "Le service n’a pas répondu.";
   if (error instanceof ProviderError && (error.status === 401 || error.status === 403)) await markFailing(services, workspaceId, connectionId, error);
   tick.result.failed += 1;
   if (attempts >= MAX_ATTEMPTS) return holdForMember(tick, due, message.id, { status: "failed", note });

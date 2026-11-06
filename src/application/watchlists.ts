@@ -1,5 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { prospectable, type RegistryCompany } from "@/domain/registry";
+import { withoutSecrets } from "@/infrastructure/connectors/without-secrets";
 import { searchBodacc } from "@/infrastructure/bodacc/client";
 import { watchlist, type WatchQuery } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
@@ -81,19 +82,25 @@ export async function runWatchlist(services: Services, workspaceId: string, id: 
     if (added > 0) await announce(services, workspaceId, row.name, added, row.listId);
     return { ok: true, added };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Le service n’a pas répondu.";
+    const message = error instanceof Error ? withoutSecrets(error.message) : "Le service n’a pas répondu.";
     await withWorkspace(services.db, workspaceId, (tx) => tx.update(watchlist).set({ lastError: message }).where(eq(watchlist.id, id)));
     return { ok: false, error: message };
   }
 }
 
-/** Every watchlist of every workspace, on the trusted path: the daily run. */
-export async function runAllWatchlists(services: Services): Promise<{ checked: number; added: number }> {
+/** Every watchlist of every workspace, on the trusted path: the daily run. One that fails is none of the others' trouble, and its next run covers the gap. */
+export async function runAllWatchlists(services: Services): Promise<{ checked: number; added: number; failed: number }> {
   const rows = await services.db.select({ id: watchlist.id, workspaceId: watchlist.workspaceId }).from(watchlist);
   let added = 0;
+  let failed = 0;
   for (const row of rows) {
-    const result = await runWatchlist(services, row.workspaceId, row.id);
-    if (result.ok) added += result.added;
+    try {
+      const result = await runWatchlist(services, row.workspaceId, row.id);
+      if (result.ok) added += result.added;
+    } catch (error) {
+      failed += 1;
+      console.error("A watchlist failed", row.id, error instanceof Error ? withoutSecrets(error.message) : error);
+    }
   }
-  return { checked: rows.length, added };
+  return { checked: rows.length, added, failed };
 }

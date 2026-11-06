@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectWithFields } from "@/application/connections";
 import { confirmContact } from "@/application/contacts";
-import { enroll, removeFromSequence } from "@/application/enrollments";
+import { dueEnrollments, enroll, removeFromSequence } from "@/application/enrollments";
 import { approveMessages, messagesToReview, retryMessage, writeMessage } from "@/application/messages";
 import { addFromRegistry, createList, prospectsOf } from "@/application/prospects";
 import { finishEmptiedSequences, resumeMailbox, runScheduler, tickWorkspace, workspacesWithDueWork } from "@/application/scheduler";
@@ -131,6 +131,9 @@ const inHours = (hours: number) => new Date(MONDAY.getTime() + hours * 3_600_000
 const afterDays = (days: number) => new Date(MONDAY.getTime() + days * DAY_MS);
 
 const reply = (address: string, overrides = {}) => ({ type: "replied" as const, channel: "email" as const, externalId: `r-${crypto.randomUUID()}`, address, at: now, detail: "Volontiers", ...overrides });
+
+const failingFor = (table: string, check: string) => db.execute(sql.raw(`alter table ${table} add constraint fail_for_a_test check (${check}) not valid`));
+const failingNoMore = (table: string) => db.execute(sql.raw(`alter table ${table} drop constraint fail_for_a_test`));
 
 describe("launching", () => {
   it("sends nothing while it's a draft", async () => {
@@ -864,5 +867,63 @@ describe("keeping workspaces apart", () => {
     expect(await enroll(db, other.workspaceId, mine.sequenceId, mine.prospects.map((found) => found.id), now)).toBeNull();
     expect((await tickWorkspace(services, other.workspaceId)).sent).toBe(0);
     expect(sent.email).toEqual([]);
+  });
+});
+
+describe("someone whose turn fails", () => {
+  const TWO: [string, string][] = [["Jeanne", "Martin"], ["Paul", "Durand"]];
+
+  it("doesn't stop the others in that workspace, and goes behind them for a while", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { workspaceId } = await launched([FIRST_EMAIL], { names: TWO });
+    const [first, second] = await enrollmentsOf(workspaceId);
+    await withWorkspace(db, workspaceId, (tx) => tx.update(enrollment).set({ nextDueAt: new Date(MONDAY.getTime() - 60_000) }).where(eq(enrollment.id, first.id)));
+    await failingFor("step_message", `enrollment_id <> '${first.id}'`);
+    const result = await tickWorkspace(services, workspaceId).finally(() => failingNoMore("step_message"));
+    expect(result).toMatchObject({ sent: 1, failed: 1 });
+    expect((await messagesOf(workspaceId)).map(({ enrollmentId, status }) => [enrollmentId, status])).toEqual([[second.id, "sent"]]);
+    const stillDue = (await enrollmentsOf(workspaceId)).find(({ id }) => id === first.id);
+    expect(stillDue?.status).toBe("active");
+    expect(stillDue?.nextDueAt?.getTime()).toBeGreaterThan(MONDAY.getTime());
+    error.mockRestore();
+  });
+
+  it("gets their step on a later run, once it works again", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { workspaceId } = await launched([FIRST_EMAIL]);
+    const [only] = await enrollmentsOf(workspaceId);
+    await failingFor("step_message", `enrollment_id <> '${only.id}'`);
+    await tickWorkspace(services, workspaceId).finally(() => failingNoMore("step_message"));
+    expect((await tickWorkspace(services, workspaceId)).sent).toBe(0);
+    now = inHours(2);
+    expect((await tickWorkspace(services, workspaceId)).sent).toBe(1);
+    error.mockRestore();
+  });
+});
+
+describe("a mailbox that can't be opened", () => {
+  it("leaves the workspace's other mailbox sending", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { workspaceId, mailboxIds } = await launched([FIRST_EMAIL], { mailboxes: ["ada@northwind.fr", "bea@northwind.fr"] });
+    await withWorkspace(db, workspaceId, (tx) => tx.update(connection).set({ sealedCredentials: "unreadable" }).where(eq(connection.id, mailboxIds[0])));
+    expect((await tickWorkspace(services, workspaceId)).sent).toBe(1);
+    expect(sent.email.map((one) => one.connection)).toEqual(["bea@northwind.fr"]);
+    error.mockRestore();
+  });
+});
+
+describe("who comes first", () => {
+  it("isn't only the longest waiting: a sequence nobody can move on from can't fill the run for another", async () => {
+    const stuck = await launched([FIRST_EMAIL], { names: [["Jeanne", "Martin"], ["Paul", "Durand"], ["Marie", "Curie"]] });
+    const { workspaceId, userId, listId } = stuck;
+    await withWorkspace(db, workspaceId, (tx) => tx.update(enrollment).set({ nextDueAt: new Date(MONDAY.getTime() - DAY_MS) }));
+    const others = await peopleAt(workspaceId, listId, "900000002", [["Louise", "Michel"]]);
+    const created = await createSequence(services, workspaceId, userId, { name: "Autre", steps: [FIRST_EMAIL] });
+    if (!created.ok) throw new Error(created.error);
+    await enroll(db, workspaceId, created.id, others.map((found) => found.id), now);
+    const launch = await launchSequence(services, workspaceId, created.id, "member");
+    if (!launch.ok) throw new Error(launch.problems.join(" "));
+    const turn = await withWorkspace(db, workspaceId, (tx) => dueEnrollments(tx, now, 2));
+    expect(new Set(turn.map(({ sequenceId }) => sequenceId))).toEqual(new Set([stuck.sequenceId, created.id]));
   });
 });

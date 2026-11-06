@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { CONNECTORS, connectorOf, readFields, type Capability, type Connector, type ConnectorCategory, type ConnectorKind } from "@/domain/connectors";
 import type { AdapterClient } from "@/infrastructure/connectors/adapter";
 import { adapterOf } from "@/infrastructure/connectors";
+import { withoutSecrets } from "@/infrastructure/connectors/without-secrets";
 import { expired, isOAuthTokens, oauthApp, refreshTokens, type OAuthTokens } from "@/infrastructure/connectors/oauth";
 import { open, randomToken, seal, type Credentials } from "@/infrastructure/crypto/secrets";
 import { connection } from "@/infrastructure/db/schema/connections";
@@ -202,6 +203,6 @@ export async function safeCheck(client: AdapterClient) {
   try {
     return await client.check();
   } catch (error) {
-    return { ok: false, detail: error instanceof Error ? error.message : "Le service n’a pas répondu." };
+    return { ok: false, detail: error instanceof Error ? withoutSecrets(error.message) : "Le service n’a pas répondu." };
   }
 }

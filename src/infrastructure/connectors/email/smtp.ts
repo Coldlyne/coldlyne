@@ -7,6 +7,7 @@ import { ProviderError } from "../http";
 import { oldestFirst, signalOf, type InboxMessage } from "./classify";
 import { checkMailbox, mailboxOf } from "./mailbox";
 import { composeMessage, readMessage } from "./mime";
+import { withoutSecrets } from "../without-secrets";
 
 /**
  * Any mailbox a member can reach with a password: sends over SMTP, reads over IMAP. The sockets
@@ -212,5 +213,5 @@ function refusalBy(server: "SMTP" | "IMAP", error: unknown): ProviderError {
   if (refusal.code === "EAUTH" || refusal.authenticationFailed) {
     return new ProviderError(server, 401, `Le serveur ${server} a refusé les identifiants. Si la boîte a une double authentification, utilisez un mot de passe d’application.`);
   }
-  return new ProviderError(server, refusal.responseCode ?? 0, `Le serveur ${server} est injoignable ou a refusé la demande\u00a0: ${refusal.response ?? refusal.message}`);
+  return new ProviderError(server, refusal.responseCode ?? 0, `Le serveur ${server} est injoignable ou a refusé la demande\u00a0: ${withoutSecrets(refusal.response ?? refusal.message ?? "")}`);
 }
