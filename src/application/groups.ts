@@ -5,17 +5,13 @@ import type { Tried } from "./connection-use";
 
 /**
  * Groups of workspaces: what they share is in `directory.ts`, this is who is in one. A workspace is in a
- * new group unless someone says otherwise, and it stays in its group for good. Trusted path: the app
- * role can't write a group, or read one.
+ * new group unless the one who answers for a group says otherwise, and it stays in its group for good.
+ * Trusted path: the app role can't write a group, or read one.
  */
 
 const GROUP_NAME_LENGTH = 80;
 
-/**
- * The groups someone may start a workspace in: those where they own a workspace. Whoever owns one can
- * already let anyone into what the group shares, by inviting them there, so starting another opens
- * nothing more. An operator who started a customer's workspace and handed it over has no say any more.
- */
+/** The groups where someone owns a workspace: what lets them rename one. */
 export async function groupsOwnedBy(db: Database, userId: string): Promise<{ id: string; name: string }[]> {
   return db
     .selectDistinct({ id: directory.id, name: directory.name })
@@ -23,6 +19,35 @@ export async function groupsOwnedBy(db: Database, userId: string): Promise<{ id:
     .innerJoin(workspace, eq(workspace.directoryId, directory.id))
     .innerJoin(member, and(eq(member.workspaceId, workspace.id), eq(member.userId, userId), eq(member.role, "owner")))
     .orderBy(directory.name);
+}
+
+/**
+ * Who answers for a group: who started it, while they own a workspace of it; otherwise whoever has
+ * owned one there longest. Worked out each time rather than kept, so nobody's leaving can leave a
+ * group with no one: every workspace keeps an owner.
+ */
+async function holderOf(db: Database, groupId: string): Promise<string | undefined> {
+  const owners = await db
+    .select({ userId: member.userId, founderId: directory.founderId })
+    .from(member)
+    .innerJoin(workspace, eq(workspace.id, member.workspaceId))
+    .innerJoin(directory, eq(directory.id, workspace.directoryId))
+    .where(and(eq(directory.id, groupId), eq(member.role, "owner")))
+    .orderBy(member.createdAt, member.userId);
+  return owners.find(({ userId, founderId }) => userId === founderId)?.userId ?? owners[0]?.userId;
+}
+
+/**
+ * The groups someone may start a workspace in: those they answer for. Owning a workspace of a group
+ * isn't enough. Owners are made by other owners and can be removed, while a workspace never leaves its
+ * group: a space someone brought in on the strength of a role they later lost would keep them reading
+ * what the group shares for good. An operator who started a customer's workspace and handed it over
+ * has no say either.
+ */
+export async function groupsToAddTo(db: Database, userId: string): Promise<{ id: string; name: string }[]> {
+  const owned = await groupsOwnedBy(db, userId);
+  const holders = await Promise.all(owned.map(({ id }) => holderOf(db, id)));
+  return owned.filter((_, index) => holders[index] === userId);
 }
 
 /** The group a workspace is in. */

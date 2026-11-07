@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Database } from "@/infrastructure/db/client";
 import { directory, member, workspace } from "@/infrastructure/db/schema/tenancy";
 import { isAdmin, type Env } from "@/infrastructure/env";
-import { groupsOwnedBy } from "./groups";
+import { groupsToAddTo } from "./groups";
 
 const WORKSPACE_NAME_LENGTH = 80;
 
@@ -10,8 +10,8 @@ const WORKSPACE_NAME_LENGTH = 80;
 async function startIn(db: Database, userId: string, name: string, inGroup?: string): Promise<string | null> {
   const slug = `${name.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "workspace"}-${crypto.randomUUID().slice(0, 6)}`;
   return db.transaction(async (tx) => {
-    if (inGroup && !(await groupsOwnedBy(tx, userId)).some(({ id }) => id === inGroup)) return null;
-    const directoryId = inGroup ?? (await tx.insert(directory).values({ name: name.trim() }).returning({ id: directory.id }))[0].id;
+    if (inGroup && !(await groupsToAddTo(tx, userId)).some(({ id }) => id === inGroup)) return null;
+    const directoryId = inGroup ?? (await tx.insert(directory).values({ name: name.trim(), founderId: userId }).returning({ id: directory.id }))[0].id;
     const [created] = await tx.insert(workspace).values({ name: name.trim(), slug, directoryId }).returning({ id: workspace.id });
     await tx.insert(member).values({ workspaceId: created.id, userId, role: "owner" });
     return created.id;

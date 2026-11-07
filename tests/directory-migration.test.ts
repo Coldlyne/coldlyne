@@ -52,6 +52,11 @@ describe("who shares with whom", () => {
     expect(found[C1].group).not.toBe(found[A3].group);
   });
 
+  it("keeps who started each group: the oldest owner of its first workspace", async () => {
+    const founders = await rows(db, sql`select w.id, d.founder_id from workspace w join directory d on d.id = w.directory_id where w.id in (${sql.join([A3, C1, D1].map((id) => sql`${id}`), sql`, `)})`);
+    expect(Object.fromEntries(founders.map(({ id, founder_id }) => [id, founder_id]))).toEqual({ [A3]: "ada", [C1]: "cleo", [D1]: null });
+  });
+
   it("names a group after its first workspace, until someone renames it", async () => {
     const found = await groups();
     expect(found[A1].name).toBe("Northwind");

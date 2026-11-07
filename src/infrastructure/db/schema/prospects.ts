@@ -162,13 +162,15 @@ export const contactDetail = pgTable(
   ],
 ).enableRLS();
 
-export const suppressionReason = pgEnum("suppression_reason", ["opted_out", "bounced", "asked", "member"]);
+export const suppressionReason = pgEnum("suppression_reason", ["opted_out", "bounced", "asked", "member", "crm"]);
 
 /**
  * An address or a whole domain the workspace never writes to again, from any of its mailboxes and
  * sending domains, and why. An opt-out is said to one workspace and stays there: another of the
  * directory learns of it (`elsewhereOf`) and decides. A bounce is a fact about the address, whoever
- * wrote, so the directory's other workspaces read that kind too, to skip it when sending.
+ * wrote, so the directory's other workspaces read that kind too, to skip it when sending. `crm` is
+ * who a linked CRM says is a customer or an open deal: nobody prospects them, though a member can
+ * still answer someone already in conversation. It can also hold a whole company (`domain/crm-exclusions.ts`).
  */
 export const suppression = pgTable(
   "suppression",

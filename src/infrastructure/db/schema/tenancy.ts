@@ -15,6 +15,8 @@ import { appRole, createdAt, currentDirectory, tenantIsolation, workspaceColumn 
 export const directory = pgTable("directory", {
   id: uuid().primaryKey().defaultRandom(),
   name: text().notNull(),
+  /** Who started it: they alone add a workspace to it, while they own one of its workspaces (`groups.ts`). */
+  founderId: text().references(() => user.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 }).enableRLS();
 

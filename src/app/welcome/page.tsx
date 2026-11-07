@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { groupsOwnedBy } from "@/application/groups";
+import { groupsToAddTo } from "@/application/groups";
 import { mayStartWorkspace, startWorkspace, workspacesOf } from "@/application/workspaces";
 import { AuthCard, AuthFrame, AuthTitle } from "@/components/auth-frame";
 import { Loading } from "@/components/shell";
@@ -47,7 +47,7 @@ async function Form({ searchParams }: { searchParams: PageProps<"/welcome">["sea
     if (hasWorkspace) redirect(safeNext(next));
     return <NoWorkspace />;
   }
-  const groups = await groupsOwnedBy(db(), member.userId);
+  const groups = await groupsToAddTo(db(), member.userId);
   return (
     <AuthCard>
       <AuthTitle>Quelle entreprise prospecte ?</AuthTitle>

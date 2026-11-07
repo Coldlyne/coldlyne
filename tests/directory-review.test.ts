@@ -9,15 +9,16 @@ import { addFromRegistry, createList, prospectsOf, suppress, suppressedOf } from
 import { runScheduler, tickWorkspace } from "@/application/scheduler";
 import { createSequence, launchSequence, type StepInput } from "@/application/sequences";
 import type { Services } from "@/application/services";
-import { recordSignals } from "@/application/signals";
-import { tasksOf } from "@/application/tasks";
+import { recordOutreach, recordSignals } from "@/application/signals";
+import { completeTask, tasksOf } from "@/application/tasks";
 import { saveSettings } from "@/application/workspace-settings";
 import { createWorkspace, startWorkspace } from "@/application/workspaces";
 import { readProspectsCsv } from "@/domain/csv-import";
 import { fromRegistry } from "@/domain/registry";
 import type { Database } from "@/infrastructure/db/client";
 import { user } from "@/infrastructure/db/schema/auth";
-import { company } from "@/infrastructure/db/schema/prospects";
+import { outreach } from "@/infrastructure/db/schema/connections";
+import { company, suppression } from "@/infrastructure/db/schema/prospects";
 import { enrollment, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { member, workspace } from "@/infrastructure/db/schema/tenancy";
 import { withWorkspace } from "@/infrastructure/db/tenant";
@@ -201,6 +202,46 @@ describe("R3: which address a space writes to", () => {
     sent.length = 0;
     await tickWorkspace(services, second);
     expect(sent.map(({ to }) => to)).toEqual(["contact@acme.example"]);
+  });
+});
+
+describe("which number a task gives a member", () => {
+  const CALL_ONLY: StepInput[] = [{ channel: "call", body: "Appeler." }];
+
+  /** A second space calling Jeanne: another space found one number, its own file brought another. */
+  async function callingJeanne() {
+    const { first, second, userId, here, there, secondList } = await twoSpaces();
+    await confirmContact(db, first, here.id, { kind: "phone", value: "+33611111111", page: "https://acme.example/c" });
+    await importProspects(services, second, secondList, fileWith(",+33622222222"));
+    await sequenceFor(second, userId, await mailbox(second, userId, "bea@contoso.example"), [there.id], CALL_ONLY);
+    await tickWorkspace(services, second);
+    const [{ id: enrollmentId }] = await enrollmentsOf(second);
+    return { second, userId, enrollmentId };
+  }
+
+  it("is this space's own before an older one another space found", async () => {
+    const { second, userId } = await callingJeanne();
+    expect(await tasksOf(db, second, userId, true)).toMatchObject([{ channel: "call", address: "+33622222222" }]);
+  });
+
+  it("stays the one already called, so a conversation keeps its number", async () => {
+    const { second, userId, enrollmentId } = await callingJeanne();
+    await recordOutreach(db, second, { connectionId: null, channel: "call", address: "+33611111111", enrollmentId, at: now });
+    expect(await tasksOf(db, second, userId, true)).toMatchObject([{ address: "+33611111111" }]);
+  });
+
+  it("isn't one that bounced here, even its own", async () => {
+    const { second, userId } = await callingJeanne();
+    await withWorkspace(db, second, (tx) => tx.insert(suppression).values({ value: "+33622222222", reason: "bounced" }));
+    expect(await tasksOf(db, second, userId, true)).toMatchObject([{ address: "+33611111111" }]);
+  });
+
+  it("is what completing the task records, so a reply to that number is known", async () => {
+    const { second, userId, enrollmentId } = await callingJeanne();
+    const [task] = await tasksOf(db, second, userId, true);
+    expect((await completeTask(services, second, userId, task.id, "no_answer")).ok).toBe(true);
+    const written = await withWorkspace(db, second, (tx) => tx.select({ address: outreach.address }).from(outreach).where(eq(outreach.enrollmentId, enrollmentId)));
+    expect(written).toEqual([{ address: "+33622222222" }]);
   });
 });
 

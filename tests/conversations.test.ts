@@ -272,6 +272,24 @@ describe("a conversation", () => {
     expect((await replyToProspect(services, workspaceId, prospectId, { body: "x" })).ok).toBe(false);
   });
 
+  it("won't write when another of their details is on the list, not only the address it would use", async () => {
+    const { workspaceId, prospectId } = await answered();
+    await confirmContact(db, workspaceId, prospectId, { kind: "phone", value: "+33612345678", page: "https://acme.fr" });
+    await withWorkspace(db, workspaceId, (tx) => tx.insert(suppression).values({ value: "+33612345678", reason: "opted_out" }));
+    sent.length = 0;
+    expect(await replyToProspect(services, workspaceId, prospectId, { body: "Jeudi, parfait." })).toEqual({ ok: false, error: "Cette personne a demandé à ne plus être contactée." });
+    expect(sent).toEqual([]);
+  });
+
+  it("still writes when another of their details only bounced: that says nothing of what they want", async () => {
+    const { workspaceId, prospectId } = await answered();
+    await confirmContact(db, workspaceId, prospectId, { kind: "email", value: "ancienne@acme.fr", page: "https://acme.fr" });
+    await withWorkspace(db, workspaceId, (tx) => tx.insert(suppression).values({ value: "ancienne@acme.fr", reason: "bounced" }));
+    sent.length = 0;
+    expect((await replyToProspect(services, workspaceId, prospectId, { body: "Jeudi, parfait." })).ok).toBe(true);
+    expect(sent[0].to).toBe("jeanne@acme.fr");
+  });
+
   it("says why a reply couldn't go, and that nothing was sent to someone not written to", async () => {
     const { workspaceId, prospectId } = await answered();
     behaviour.sendFails = true;

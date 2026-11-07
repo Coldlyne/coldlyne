@@ -78,6 +78,13 @@
       "when": 1793974052639,
       "tag": "0010_directory",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794013858325,
+      "tag": "0011_group_founder_crm_exclusion",
+      "breakpoints": true
     }
   ]
 }

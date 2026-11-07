@@ -646,13 +646,13 @@ describe("which group a new workspace joins", () => {
     expect(await startWorkspace(db, ADMINS, founder(userId), "Mine", crypto.randomUUID())).toBeNull();
   });
 
-  it("can be joined by someone made owner of a workspace of it, who could already let anyone in there, but never by default", async () => {
+  it("can't be joined by someone made owner of a workspace of it: that role can be taken away, and a workspace in a group can't", async () => {
     const customer = await ownerOfTwo();
     const invitee = await someone();
     await db.insert(member).values({ workspaceId: customer.first, userId: invitee, role: "member" });
     expect(await changeRole(db, customer.first, customer.userId, invitee, "owner")).toMatchObject({ ok: true });
     expect(await directoryOf(await createWorkspace(db, invitee, "Their own company"))).not.toBe(await directoryOf(customer.first));
-    expect(await directoryOf(await createWorkspace(db, invitee, "With them", await directoryOf(customer.first)))).toBe(await directoryOf(customer.first));
+    await expect(createWorkspace(db, invitee, "With them", await directoryOf(customer.first))).rejects.toThrow("isn't theirs");
   });
 
   it("can't be one they've left: no way back into what they no longer own", async () => {
