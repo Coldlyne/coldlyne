@@ -28,7 +28,7 @@ function client(routes: FakeRoute[], fields: Record<string, string> = FIELDS) {
 describe("Soldlyne", () => {
   it("is named after the workspace its key opens, with the key in a bearer header", async () => {
     const { adapter, calls } = client([
-      { match: WORKSPACE, json: { id: "w1", name: "Northwind" } },
+      { match: WORKSPACE, json: { id: "w1", name: "Northwind", handoverVersion: 2 } },
       { match: OFF_LIMITS, json: { data: [], nextCursor: null, asOf: "2026-11-07T00:00:00.000Z" } },
     ]);
     expect(await adapter.check()).toEqual({ ok: true, detail: "compte «\u00a0Northwind\u00a0»", label: "Northwind" });
@@ -37,12 +37,29 @@ describe("Soldlyne", () => {
 
   it("says what to do with a key that only reads, rather than connecting and failing later", async () => {
     const { adapter } = client([
-      { match: WORKSPACE, json: { id: "w1", name: "Northwind" } },
+      { match: WORKSPACE, json: { id: "w1", name: "Northwind", handoverVersion: 2 } },
       { match: OFF_LIMITS, status: 403, json: { error: "This key can't hand anyone over." } },
     ]);
     const checked = await adapter.check();
     expect(checked.ok).toBe(false);
     expect(checked.detail).toContain("clé pour Coldlyne");
+  });
+
+  it.each([[undefined], [1]])("refuses an install on handover version %s, which would bring back people deleted there, and asks it nothing more", async (handoverVersion) => {
+    const { adapter, calls } = client([{ match: WORKSPACE, json: { id: "w1", name: "Northwind", handoverVersion } }]);
+    const checked = await adapter.check();
+    expect(checked.ok).toBe(false);
+    expect(checked.detail).toContain("mettez-la à jour");
+    expect(checked.detail).toContain("supprimées");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("takes a later handover version", async () => {
+    const { adapter } = client([
+      { match: WORKSPACE, json: { id: "w1", name: "Northwind", handoverVersion: 3 } },
+      { match: OFF_LIMITS, json: { data: [], nextCursor: null, asOf: "x" } },
+    ]);
+    expect((await adapter.check()).ok).toBe(true);
   });
 
   it("says when the key is refused", async () => {
@@ -80,6 +97,16 @@ describe("Soldlyne", () => {
       note: "A répondu par Email : volontiers.",
       source: "EMAIL",
     });
+  });
+
+  it("hears that someone was deleted there as nothing to hand over, with no id and no error", async () => {
+    const { adapter } = client([{ match: HANDOVERS, status: 409, json: { error: "person_deleted" } }]);
+    expect(await adapter.pushContact!(JEANNE)).toEqual({ externalId: null });
+  });
+
+  it.each(["The product this key opens deals on is gone: make a new key in Settings.", "This workspace has no open stage to put a deal in."])("takes any other 409 for the trouble it is: %s", async (error) => {
+    const { adapter } = client([{ match: HANDOVERS, status: 409, json: { error } }]);
+    await expect(adapter.pushContact!(JEANNE)).rejects.toThrow(error);
   });
 
   it("sends only what it knows, within what Soldlyne takes", async () => {

@@ -76,5 +76,6 @@ export async function pushToCrmAction(listId: string, connectionId: string, pros
   const seat = await currentSeat();
   const pushed = await pushToCrm(appServices(), seat.workspaceId, connectionId, prospectId, "");
   revalidatePath(`/lists/${listId}`);
-  return pushed.ok ? { ok: true, said: `Envoyé à ${pushed.through}.` } : pushed;
+  if (!pushed.ok) return pushed;
+  return { ok: true, said: pushed.externalId ? `Envoyé à ${pushed.through}.` : `Cette personne a été supprimée de ${pushed.through} : elle y reste supprimée, rien n’y a été écrit.` };
 }

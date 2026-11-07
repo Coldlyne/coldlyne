@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { onePerDetail, type ContactFinding } from "@/domain/contacts";
 import { sha256 } from "@/infrastructure/crypto/secrets";
 import type { Database } from "@/infrastructure/db/client";
@@ -42,13 +42,18 @@ async function crmContactOf(db: Database, workspaceId: string, prospectId: strin
   });
 }
 
-export type Pushed = { ok: true; externalId: string; through: string; already: boolean } | { ok: false; error: string };
+/** `externalId` is null when the CRM holds them as deleted: nothing was written there, and they're left alone. */
+export type Pushed = { ok: true; externalId: string | null; through: string; already: boolean } | { ok: false; error: string };
+
+/** What's kept for someone a CRM holds as deleted: a push to remember, so the next sync doesn't ask again, with nothing to point at. */
+const LEFT_ALONE = "";
 
 /**
  * Sends a prospect to a connected CRM: created or updated there, with the note added. The same
  * note again changes nothing, so an assistant's retry can't repeat it on the CRM's timeline; with
  * no note, a push only brings the person up to date, as often as it's asked. It writes to the CRM
- * and nowhere else: nobody is contacted.
+ * and nowhere else: nobody is contacted. Someone the CRM holds as deleted is no failure: they're
+ * left alone, what they wrote stays here, and the scheduled sync doesn't ask again.
  */
 export async function pushToCrm(services: Services, workspaceId: string, connectionId: string, prospectId: string, note: string, channel?: Channel): Promise<Pushed> {
   const opened = await openConnection(services, workspaceId, connectionId);
@@ -59,10 +64,10 @@ export async function pushToCrm(services: Services, workspaceId: string, connect
   const noteHash = note ? sha256(note) : "";
   const through = opened.row.label;
   const earlier = note ? await pushOf(services.db, workspaceId, connectionId, prospectId, noteHash) : undefined;
-  if (earlier) return { ok: true, externalId: earlier.externalId, through, already: true };
+  if (earlier) return { ok: true, externalId: earlier.externalId || null, through, already: true };
   try {
     const { externalId } = await pusher.pushContact(contact);
-    await rememberPush(services, workspaceId, { connectionId, prospectId, noteHash, externalId });
+    await rememberPush(services, workspaceId, { connectionId, prospectId, noteHash, externalId: externalId ?? LEFT_ALONE });
     return { ok: true, externalId, through, already: false };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Le CRM n’a pas répondu." };
@@ -91,7 +96,7 @@ export async function pushesOf(db: Database, workspaceId: string, prospectIds: r
     tx
       .select({ prospectId: crmPush.prospectId, connectionId: crmPush.connectionId, pushedAt: sql<Date>`max(${crmPush.pushedAt})`.mapWith(crmPush.pushedAt) })
       .from(crmPush)
-      .where(inArray(crmPush.prospectId, [...prospectIds]))
+      .where(and(inArray(crmPush.prospectId, [...prospectIds]), ne(crmPush.externalId, LEFT_ALONE)))
       .groupBy(crmPush.prospectId, crmPush.connectionId),
   );
 }

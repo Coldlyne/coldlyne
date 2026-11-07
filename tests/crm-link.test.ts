@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectAndFirstRead, readNow } from "@/application/connection-use";
 import { connectWithFields, disconnect } from "@/application/connections";
-import { confirmContact, pushToCrm } from "@/application/contacts";
+import { confirmContact, pushesOf, pushToCrm } from "@/application/contacts";
 import { enroll } from "@/application/enrollments";
 import { addFromRegistry, createList, prospectsOf, suppress, suppressedOf } from "@/application/prospects";
 import { whatIsScheduled } from "@/application/scheduled-work";
@@ -11,7 +11,7 @@ import { createSequence, launchSequence, type StepInput } from "@/application/se
 import type { Services } from "@/application/services";
 import { recordSignals, syncEveryWorkspace, syncWorkspace } from "@/application/signals";
 import { tasksOf } from "@/application/tasks";
-import { replyToProspect, setInterest } from "@/application/threads";
+import { replyToProspect, setInterest, threadOf } from "@/application/threads";
 import { saveSettings } from "@/application/workspace-settings";
 import { createWorkspace } from "@/application/workspaces";
 import { fromRegistry } from "@/domain/registry";
@@ -64,16 +64,18 @@ interface Entry {
 }
 
 /** A Soldlyne as seen from the outside: who it says is off limits, and who it was handed. */
-const crm = { offLimits: [] as Entry[], handedOver: [] as Record<string, unknown>[], refuse: false, down: false, calls: [] as string[] };
+const crm = { offLimits: [] as Entry[], handedOver: [] as Record<string, unknown>[], refuse: false, down: false, deletedThere: false, productGone: false, calls: [] as string[] };
 
 const crmFetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
   const url = new URL(input.toString());
   crm.calls.push(`${init.method ?? "GET"} ${url.origin}${url.pathname}`);
   if (crm.down) return new Response(JSON.stringify({ error: "Down" }), { status: 503 });
-  if (url.pathname === "/api/v1/workspace") return Response.json({ id: "w1", name: "Northwind CRM" });
+  if (url.pathname === "/api/v1/workspace") return Response.json({ id: "w1", name: "Northwind CRM", handoverVersion: 2 });
   if (url.pathname === "/api/v1/do-not-prospect") return Response.json({ data: crm.offLimits, nextCursor: null, asOf: "x" });
   if (url.pathname === "/api/v1/handovers") {
     if (crm.refuse) return new Response(JSON.stringify({ error: "No" }), { status: 400 });
+    if (crm.deletedThere) return new Response(JSON.stringify({ error: "person_deleted" }), { status: 409 });
+    if (crm.productGone) return new Response(JSON.stringify({ error: "The product this key opens deals on is gone: make a new key in Settings." }), { status: 409 });
     crm.handedOver.push(JSON.parse(String(init.body)));
     return Response.json({ dealId: `deal-${crm.handedOver.length}`, personId: "p", companyId: "c", created: true }, { status: 201 });
   }
@@ -92,7 +94,7 @@ beforeAll(async () => {
 beforeEach(() => {
   now = MONDAY;
   sentMail.length = 0;
-  Object.assign(crm, { offLimits: [], handedOver: [], refuse: false, down: false, calls: [] });
+  Object.assign(crm, { offLimits: [], handedOver: [], refuse: false, down: false, deletedThere: false, productGone: false, calls: [] });
 });
 
 const customer = (overrides: Partial<Entry> = {}): Entry => ({ why: "customer", company: null, people: [], ...overrides });
@@ -260,6 +262,61 @@ describe("someone replying", () => {
     crm.refuse = true;
     expect((await syncWorkspace(services, made.workspaceId)).failing).toEqual(["Northwind CRM"]);
     expect(crm.calls.filter((call) => call.startsWith("POST"))).toHaveLength(1);
+  });
+});
+
+describe("someone deleted in Soldlyne", () => {
+  const handOverCalls = () => crm.calls.filter((call) => call.startsWith("POST"));
+
+  it("is left alone when they reply: no retry, no error on the connection, no failing job, and the reply stays here", async () => {
+    const made = await space();
+    const id = await linked(made.workspaceId, made.userId);
+    await running(made);
+    await replied(made);
+    crm.deletedThere = true;
+    expect(await syncWorkspace(services, made.workspaceId)).toMatchObject({ failing: [] });
+    expect(handOverCalls()).toHaveLength(1);
+    const [row] = await withWorkspace(db, made.workspaceId, (tx) => tx.select().from(connection).where(eq(connection.id, id)));
+    expect(row).toMatchObject({ status: "connected", lastError: null });
+    expect(crm.handedOver).toEqual([]);
+    expect((await threadOf(db, made.workspaceId, made.prospectId))?.items.at(-1)).toMatchObject({ direction: "in", text: "Volontiers, jeudi ?" });
+    await syncWorkspace(services, made.workspaceId);
+    now = new Date("2026-11-11T06:00:00Z");
+    await syncWorkspace(services, made.workspaceId);
+    expect(handOverCalls()).toHaveLength(1);
+  });
+
+  it("doesn't count as handed over on the connection's page", async () => {
+    const made = await space();
+    const id = await linked(made.workspaceId, made.userId);
+    await running(made);
+    await replied(made);
+    crm.deletedThere = true;
+    expect(await readNow(services, made.workspaceId, id)).toEqual({ ok: true, said: "0 nouvelle exclusion, 0 personne envoyée." });
+  });
+
+  it("tells a member who pushes them that nothing was written, and the list doesn't say sent", async () => {
+    const made = await space();
+    const id = await linked(made.workspaceId, made.userId);
+    crm.deletedThere = true;
+    expect(await pushToCrm(services, made.workspaceId, id, made.prospectId, "Intéressée")).toEqual({ ok: true, externalId: null, through: "Northwind CRM", already: false });
+    expect(await pushToCrm(services, made.workspaceId, id, made.prospectId, "Intéressée")).toEqual({ ok: true, externalId: null, through: "Northwind CRM", already: true });
+    expect(await pushesOf(db, made.workspaceId, [made.prospectId])).toEqual([]);
+  });
+
+  it("isn't how any other refusal is taken: a product gone says so on the connection, and they're still waiting", async () => {
+    const made = await space();
+    const id = await linked(made.workspaceId, made.userId);
+    await running(made);
+    await replied(made);
+    crm.productGone = true;
+    expect((await syncWorkspace(services, made.workspaceId)).failing).toEqual(["Northwind CRM"]);
+    const [row] = await withWorkspace(db, made.workspaceId, (tx) => tx.select().from(connection).where(eq(connection.id, id)));
+    expect(row.status).toBe("failing");
+    crm.productGone = false;
+    now = new Date("2026-11-11T06:00:00Z");
+    await syncWorkspace(services, made.workspaceId);
+    expect(crm.handedOver).toHaveLength(1);
   });
 });
 

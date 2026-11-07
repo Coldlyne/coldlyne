@@ -166,8 +166,8 @@ export interface CrmContact {
 }
 
 export interface ContactPusher {
-  /** Creates or updates the person and their company, and adds the note. */
-  pushContact(contact: CrmContact): Promise<{ externalId: string }>;
+  /** Creates or updates the person and their company, and adds the note. No id means the CRM holds them as deleted, wrote nothing, and they're to be left alone. */
+  pushContact(contact: CrmContact): Promise<{ externalId: string | null }>;
 }
 
 /** A CRM linked both ways: who it holds as customers and open deals, whom a workspace must not prospect. */

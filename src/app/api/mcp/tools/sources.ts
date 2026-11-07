@@ -102,7 +102,8 @@ export const sourceTools: ToolRegistrar = (server, context) => {
     },
     async ({ connectionId, prospectId, note }) => {
       const pushed = await pushToCrm(services, workspaceId, connectionId, prospectId, note);
-      return pushed.ok ? answer({ externalId: pushed.externalId, alreadySent: pushed.already }) : refusal(pushed.error);
+      if (!pushed.ok) return refusal(pushed.error);
+      return pushed.externalId ? answer({ externalId: pushed.externalId, alreadySent: pushed.already }) : answer({ leftAlone: true, note: "A member deleted this person in the CRM, and they stay deleted: nothing was written there. Tell the member; don't try again." });
     },
   );
 };

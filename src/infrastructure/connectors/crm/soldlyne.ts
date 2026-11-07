@@ -18,6 +18,11 @@ const PAGE = 200;
 /** A guard against an address that never stops answering: at this size, 200,000 deals. */
 const MOST_PAGES = 1000;
 const NOT_FOR_COLDLYNE = "Cette clé ne peut que lire : dans Soldlyne, créez une clé pour Coldlyne, sous Settings → API keys.";
+/** From this version on, Soldlyne keeps deleted people deleted. An older install would restore them. */
+const HANDOVER_VERSION = 2;
+const TOO_OLD = "Cette installation de Soldlyne est trop ancienne : mettez-la à jour avant de la relier, sinon elle ferait revenir les personnes que vous y avez supprimées.";
+/** What Soldlyne answers, with a 409, about someone deleted there. Its other 409s are trouble to report: a product gone, no open stage. */
+const PERSON_DELETED = "person_deleted";
 
 const SOURCE: Record<Channel, string> = { email: "EMAIL", sms: "PHONE", call: "PHONE", voicemail: "PHONE", whatsapp: "PHONE", linkedin: "LINKEDIN", instagram: "SOCIAL", messenger: "SOCIAL", x: "SOCIAL", letter: "OTHER" };
 
@@ -68,9 +73,10 @@ async function readAllOffLimits(call: Call) {
   throw new ProviderError(PROVIDER, 502, "La liste de Soldlyne ne finit pas.");
 }
 
-/** A read key would connect and then fail at the first reply: this asks for the one thing a read key can't. */
+/** Refuses an install that would restore people. And a read key would connect and then fail at the first reply: this asks for the one thing a read key can't. */
 async function workspaceNamed(call: Call): Promise<string> {
-  const { name } = await call<{ name: string }>("/api/v1/workspace");
+  const { name, handoverVersion } = await call<{ name: string; handoverVersion?: number }>("/api/v1/workspace");
+  if (!handoverVersion || handoverVersion < HANDOVER_VERSION) throw new ProviderError(PROVIDER, 400, TOO_OLD);
   try {
     await call(`/api/v1/do-not-prospect?limit=1`);
   } catch (error) {
@@ -80,11 +86,21 @@ async function workspaceNamed(call: Call): Promise<string> {
   return name;
 }
 
+/** The deal they're on, or no id for someone deleted there, who stays deleted and is left alone. */
+async function handOver(call: Call, contact: CrmContact): Promise<{ externalId: string | null }> {
+  try {
+    return { externalId: (await call<{ dealId: string }>("/api/v1/handovers", "POST", handover(contact))).dealId };
+  } catch (error) {
+    if (error instanceof ProviderError && error.status === 409 && error.message.includes(PERSON_DELETED)) return { externalId: null };
+    throw error;
+  }
+}
+
 export const soldlyne: Adapter = (context) => {
   const call = caller(context);
   return {
     check: () => checkAccount(() => workspaceNamed(call)),
-    pushContact: async (contact) => ({ externalId: (await call<{ dealId: string }>("/api/v1/handovers", "POST", handover(contact))).dealId }),
+    pushContact: (contact) => handOver(call, contact),
     offLimits: () => readAllOffLimits(call),
   };
 };

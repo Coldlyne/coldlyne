@@ -73,7 +73,7 @@ async function handOverReplies(services: Services, workspaceId: string, connecti
   for (const { prospectId, lastChannel, lastDetail } of await waitingToGo(services.db, workspaceId, connectionId)) {
     const channel = (lastChannel ?? "email") as Channel;
     const pushed = await pushToCrm(services, workspaceId, connectionId, prospectId, replyNote(channel, lastDetail), channel);
-    if (pushed.ok) handedOver += 1;
+    if (pushed.ok) handedOver += pushed.externalId ? 1 : 0;
     else {
       lastRefusal = pushed.error;
       refusals += 1;
