@@ -147,7 +147,7 @@ describe("connecting Soldlyne", () => {
     const [row] = await withWorkspace(db, workspaceId, (tx) => tx.select().from(connection).where(eq(connection.id, id)));
     expect(row).toMatchObject({ kind: "soldlyne", label: "Northwind CRM", status: "connected" });
     expect(JSON.stringify(row)).not.toContain("sl_key");
-    expect((await whatIsScheduled(db)).reading).toBe(true);
+    expect((await whatIsScheduled(db)).linking).toBe(true);
   });
 
   it("reads who is off limits at once: until then a sequence could write to a customer", async () => {
@@ -378,6 +378,7 @@ describe("someone in conversation who becomes a deal", () => {
     await replied(made);
     await syncWorkspace(services, made.workspaceId);
     crm.offLimits = [withAddress("jeanne@acme.example")];
+    now = new Date("2026-11-10T06:00:00Z");
     await syncWorkspace(services, made.workspaceId);
     expect(await listed(made.workspaceId)).toEqual({ "jeanne@acme.example": "crm" });
     expect((await enrollmentsIn(made.workspaceId))[0]).toMatchObject({ status: "stopped", stopReason: "replied" });
@@ -399,6 +400,165 @@ describe("someone in conversation who becomes a deal", () => {
     await syncWorkspace(services, made.workspaceId);
     await suppress(db, made.workspaceId, "jeanne@acme.example", "asked");
     expect((await replyToProspect(services, made.workspaceId, made.prospectId, { body: "x" })).ok).toBe(false);
+  });
+});
+
+describe("how often Soldlyne is asked, since its database bills by the hour it is awake", () => {
+  const DAILY_HOUR = new Date("2026-11-10T06:00:00Z");
+  const LATER_THAT_DAY = new Date("2026-11-10T13:00:00Z");
+  const NEXT_DAILY_HOUR = new Date("2026-11-11T06:00:00Z");
+  const offLimitsReads = () => crm.calls.filter((call) => call.includes("do-not-prospect"));
+  const handOvers = () => crm.calls.filter((call) => call.startsWith("POST"));
+
+  /** Each on a database of its own: the scheduled pass goes over every workspace. */
+  beforeEach(async () => {
+    db = await createTestDatabase();
+    services = { ...services, db };
+  });
+
+  /** Connected, its first read done, and the calls that took forgotten. */
+  async function settled() {
+    const made = await space();
+    const connected = await connectAndFirstRead(services, made.workspaceId, made.userId, "soldlyne", { address: ADDRESS, apiKey: "sl_key" });
+    if (!connected.ok) throw new Error(connected.error);
+    crm.calls.length = 0;
+    return { ...made, connectionId: connected.connection.id };
+  }
+
+  const rowOf = async ({ workspaceId, connectionId }: { workspaceId: string; connectionId: string }) => (await withWorkspace(db, workspaceId, (tx) => tx.select().from(connection).where(eq(connection.id, connectionId))))[0];
+
+  it("reads who is off limits on connect", async () => {
+    const made = await space();
+    crm.offLimits = [withAddress("client@acme.example")];
+    await connectAndFirstRead(services, made.workspaceId, made.userId, "soldlyne", { address: ADDRESS, apiKey: "sl_key" });
+    expect(offLimitsReads().length).toBeGreaterThan(0);
+    expect(await listed(made.workspaceId)).toEqual({ "client@acme.example": "crm" });
+  });
+
+  it("makes no call at all on a scheduled pass with nothing due, and leaves the connection as it was", async () => {
+    const made = await settled();
+    const before = await rowOf(made);
+    now = LATER_THAT_DAY;
+    await syncEveryWorkspace(services);
+    expect(crm.calls).toEqual([]);
+    expect(await rowOf(made)).toEqual(before);
+  });
+
+  it("reads who is off limits once in the daily hour, not again that hour or that day, and again the next", async () => {
+    await settled();
+    crm.offLimits = [withAddress("client@acme.example")];
+    now = DAILY_HOUR;
+    await syncEveryWorkspace(services);
+    expect(offLimitsReads()).toHaveLength(1);
+    now = new Date(DAILY_HOUR.getTime() + 600_000);
+    await syncEveryWorkspace(services);
+    now = LATER_THAT_DAY;
+    await syncEveryWorkspace(services);
+    expect(offLimitsReads()).toHaveLength(1);
+    now = NEXT_DAILY_HOUR;
+    await syncEveryWorkspace(services);
+    expect(offLimitsReads()).toHaveLength(2);
+  });
+
+  it("does the daily read on a pass that finds someone who replied, without doing it hourly for them", async () => {
+    const made = await settled();
+    await running(made);
+    await replied(made);
+    now = DAILY_HOUR;
+    await syncWorkspace(services, made.workspaceId);
+    expect([offLimitsReads().length, handOvers().length]).toEqual([1, 1]);
+  });
+
+  it("calls to hand someone over when someone replied, reads nothing else, and calls no more once they've gone", async () => {
+    const made = await settled();
+    await running(made);
+    await replied(made);
+    now = LATER_THAT_DAY;
+    await syncWorkspace(services, made.workspaceId);
+    expect(handOvers()).toHaveLength(1);
+    expect(offLimitsReads()).toEqual([]);
+    crm.calls.length = 0;
+    await syncWorkspace(services, made.workspaceId);
+    expect(crm.calls).toEqual([]);
+  });
+
+  it("doesn't ask a failing CRM every hour for someone it refused: that waits for its next list, and clears when it works", async () => {
+    const made = await settled();
+    await running(made);
+    await replied(made);
+    now = LATER_THAT_DAY;
+    crm.refuse = true;
+    expect((await syncWorkspace(services, made.workspaceId)).failing).toEqual(["Northwind CRM"]);
+    crm.calls.length = 0;
+    now = new Date(LATER_THAT_DAY.getTime() + 3_600_000);
+    await syncWorkspace(services, made.workspaceId);
+    expect(crm.calls).toEqual([]);
+    crm.refuse = false;
+    now = NEXT_DAILY_HOUR;
+    await syncWorkspace(services, made.workspaceId);
+    expect(handOvers()).toHaveLength(1);
+    expect(await rowOf(made)).toMatchObject({ status: "connected", lastError: null });
+  });
+
+  it("doesn't count a hand-over as having read who is off limits", async () => {
+    const made = await settled();
+    const before = await rowOf(made);
+    await running(made);
+    await replied(made);
+    now = LATER_THAT_DAY;
+    await syncWorkspace(services, made.workspaceId);
+    expect((await rowOf(made)).syncedAt).toEqual(before.syncedAt);
+  });
+
+  it("keeps trying hourly a first read that failed: until it works, a sequence could write to a customer", async () => {
+    const made = await space();
+    crm.offLimits = [{ company: "nope" } as never];
+    const connected = await connectAndFirstRead(services, made.workspaceId, made.userId, "soldlyne", { address: ADDRESS, apiKey: "sl_key" });
+    if (!connected.ok) throw new Error(connected.error);
+    crm.calls.length = 0;
+    crm.offLimits = [withAddress("client@acme.example")];
+    now = LATER_THAT_DAY;
+    await syncWorkspace(services, made.workspaceId);
+    expect(offLimitsReads()).toHaveLength(1);
+    expect(await listed(made.workspaceId)).toEqual({ "client@acme.example": "crm" });
+    crm.calls.length = 0;
+    await syncWorkspace(services, made.workspaceId);
+    expect(crm.calls).toEqual([]);
+  });
+
+  it("keeps what it read when a hand-over then fails, so that read isn't repeated", async () => {
+    const made = await space();
+    await linked(made.workspaceId, made.userId);
+    await running(made);
+    await replied(made);
+    crm.refuse = true;
+    now = LATER_THAT_DAY;
+    await syncWorkspace(services, made.workspaceId);
+    crm.refuse = false;
+    crm.calls.length = 0;
+    now = new Date(LATER_THAT_DAY.getTime() + 3_600_000);
+    await syncWorkspace(services, made.workspaceId);
+    expect(offLimitsReads()).toEqual([]);
+  });
+
+  it("reads at once when a member asks on the connection's page", async () => {
+    const made = await settled();
+    now = LATER_THAT_DAY;
+    await readNow(services, made.workspaceId, made.connectionId);
+    expect(offLimitsReads()).toHaveLength(1);
+  });
+
+  it("follows the daily rule when an assistant asks for a read of the workspace", async () => {
+    const made = await settled();
+    now = LATER_THAT_DAY;
+    await syncWorkspace(services, made.workspaceId);
+    expect(crm.calls).toEqual([]);
+  });
+
+  it("gives the hourly job nothing to wake its own database for when Soldlyne is all there is", async () => {
+    await settled();
+    await db.delete(connection).where(eq(connection.kind, "smtp"));
+    expect(await whatIsScheduled(db)).toMatchObject({ reading: false, linking: true });
   });
 });
 

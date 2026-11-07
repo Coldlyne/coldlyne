@@ -1,10 +1,11 @@
 import { and, eq, isNull, notInArray, or, sql } from "drizzle-orm";
-import { exclusionsOf, replyNote } from "@/domain/crm-exclusions";
+import { exclusionsOf, offLimitsDue, replyNote } from "@/domain/crm-exclusions";
 import type { Channel } from "@/domain/sequences";
 import type { Database } from "@/infrastructure/db/client";
-import { crmPush } from "@/infrastructure/db/schema/connections";
+import { connection, crmPush } from "@/infrastructure/db/schema/connections";
 import { prospect, suppression } from "@/infrastructure/db/schema/prospects";
 import { withWorkspace } from "@/infrastructure/db/tenant";
+import type { ConnectionRow } from "./connections";
 import { pushToCrm } from "./contacts";
 import { addToSuppressionList, ownSuppression, stopAtExcludedCompanies, stopExcludedAt } from "./enrollments";
 import type { LinkedCrm } from "./ports";
@@ -12,8 +13,9 @@ import { lastReply } from "./replies";
 import type { Services } from "./services";
 
 /**
- * A CRM linked both ways, on each sync. Who replied goes there; who it holds as customers and open
- * deals comes back as exclusions of this workspace. Neither contacts anyone.
+ * A CRM linked both ways. Who replied goes there; who it holds as customers and open deals comes back
+ * as exclusions of this workspace, once a day. Neither contacts anyone. Its database sleeps when idle
+ * and bills by the hour it is awake, so it's only asked for something when something is due.
  */
 
 /** How many people one sync hands over: the rest wait for the next, so a first read of a long history doesn't run out of time. */
@@ -29,9 +31,11 @@ const NOT_A_DEAL = ["not_interested", "wrong_person"] as const;
  * and a lost deal only comes back by someone's decision. What's new stops what's running, calls and
  * messages waiting for a member included. Says how many are new.
  */
-async function keepOffLimits(services: Services, workspaceId: string, read: LinkedCrm["offLimits"]): Promise<number> {
+async function keepOffLimits(services: Services, workspaceId: string, connectionId: string, read: LinkedCrm["offLimits"]): Promise<number> {
   const values = exclusionsOf(await read());
   return withWorkspace(services.db, workspaceId, async (tx) => {
+    // Here rather than once the whole sync worked: a hand-over refused afterwards mustn't have this read again.
+    await tx.update(connection).set({ syncedAt: services.now() }).where(eq(connection.id, connectionId));
     const known = new Set((await tx.select({ value: suppression.value }).from(suppression).where(ownSuppression)).map(({ value }) => value));
     const fresh = values.filter((value) => !known.has(value));
     if (fresh.length === 0) return 0;
@@ -83,10 +87,20 @@ async function handOverReplies(services: Services, workspaceId: string, connecti
 export interface LinkSynced {
   excluded: number;
   handedOver: number;
+  /** Whether this asked the CRM for anything. */
+  asked: boolean;
 }
 
-/** One sync of a linked CRM. Exclusions first, so a CRM refusing a person doesn't keep its customers from being known. Throws what its service said. */
-export async function syncLinkedCrm(services: Services, workspaceId: string, connectionId: string, read: LinkedCrm["offLimits"]): Promise<LinkSynced> {
-  const excluded = await keepOffLimits(services, workspaceId, read);
-  return { excluded, handedOver: await handOverReplies(services, workspaceId, connectionId) };
+/**
+ * One look at a linked CRM. Its list is read when due, or at once when a member asks; who replied goes
+ * over whenever there is someone, and finding nobody asks the CRM nothing. A CRM that's failing is only
+ * tried again with its next list: someone it refuses would otherwise keep its database awake all day.
+ * The list comes first, so a CRM refusing a person doesn't keep its customers from being known. Throws what its service said.
+ */
+export async function syncLinkedCrm(services: Services, workspaceId: string, row: Pick<ConnectionRow, "id" | "status" | "syncedAt">, read: LinkedCrm["offLimits"], atOnce: boolean): Promise<LinkSynced> {
+  const now = services.now();
+  const readingList = atOnce || offLimitsDue(row.syncedAt, now);
+  const excluded = readingList ? await keepOffLimits(services, workspaceId, row.id, read) : 0;
+  const handedOver = readingList || row.status === "connected" ? await handOverReplies(services, workspaceId, row.id) : 0;
+  return { excluded, handedOver, asked: readingList || handedOver > 0 };
 }

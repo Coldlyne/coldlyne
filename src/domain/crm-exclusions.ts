@@ -53,6 +53,18 @@ export function companyIsExcluded(company: { name: string; siren: string | null;
   return [siteDomain(company.website), sirenKey(company.siren), nameKey(company.name)].some((value) => value !== null && refused.has(value));
 }
 
+/**
+ * The hour a linked CRM's list is read, in UTC: its database sleeps when idle and bills by the hour it
+ * is awake, so everything that reads it once a day comes in the same hour, and it wakes once.
+ */
+const DAILY_READ_UTC_HOUR = 6;
+const HOUR_MS = 3_600_000;
+
+export const isDailyReadHour = (now: Date) => now.getUTCHours() === DAILY_READ_UTC_HOUR;
+
+/** Whether it's time to read a linked CRM's list: once in that hour, or any hour until a read has worked, since until then a sequence could write to a customer. */
+export const offLimitsDue = (lastRead: Date | null, now: Date) => lastRead === null || (isDailyReadHour(now) && now.getTime() - lastRead.getTime() >= HOUR_MS);
+
 const LONGEST_NOTE = 4000;
 
 /** What a reply says on the CRM's side. Their words are data there as they are here. */

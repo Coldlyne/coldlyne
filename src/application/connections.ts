@@ -32,7 +32,7 @@ export interface ConnectionView {
   signingSecret: string | null;
 }
 
-type ConnectionRow = typeof connection.$inferSelect;
+export type ConnectionRow = typeof connection.$inferSelect;
 
 /** The signed address a connection's service posts its webhooks to. */
 export const hookUrlOf = (services: Pick<Services, "settings">, row: Pick<ConnectionRow, "id" | "hookToken">) =>

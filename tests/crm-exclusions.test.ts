@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { companyIsExcluded, exclusionsOf, replyNote, type OffLimitsEntry } from "@/domain/crm-exclusions";
+import { companyIsExcluded, exclusionsOf, isDailyReadHour, offLimitsDue, replyNote, type OffLimitsEntry } from "@/domain/crm-exclusions";
 import { expectFrenchTypography } from "./support/french";
 
 const entry = (overrides: Partial<OffLimitsEntry> = {}): OffLimitsEntry => ({ company: null, people: [], ...overrides });
@@ -57,5 +57,25 @@ describe("what a reply says in the CRM", () => {
     expect(replyNote("email", "Volontiers")).toBe("A répondu par Email : Volontiers");
     expect(replyNote("linkedin", null)).toBe("A répondu par LinkedIn.");
     expect(replyNote("email", "x".repeat(9000)).length).toBeLessThanOrEqual(4100);
+  });
+});
+
+describe("when a linked CRM's list is read", () => {
+  const AT = (time: string) => new Date(`2026-11-10T${time}:00Z`);
+
+  it("is in the hour after 06:00 UTC, whatever the season says in Paris", () => {
+    expect(isDailyReadHour(AT("06:00"))).toBe(true);
+    expect(isDailyReadHour(AT("06:59"))).toBe(true);
+    expect(isDailyReadHour(AT("05:59"))).toBe(false);
+    expect(isDailyReadHour(AT("07:00"))).toBe(false);
+    expect(isDailyReadHour(new Date("2026-07-10T06:30:00Z"))).toBe(true);
+  });
+
+  it("is any hour when it has never worked, and otherwise once in that hour", () => {
+    expect(offLimitsDue(null, AT("13:00"))).toBe(true);
+    expect(offLimitsDue(new Date("2026-11-09T06:00:00Z"), AT("13:00"))).toBe(false);
+    expect(offLimitsDue(new Date("2026-11-09T06:00:00Z"), AT("06:00"))).toBe(true);
+    expect(offLimitsDue(AT("06:00"), AT("06:30"))).toBe(false);
+    expect(offLimitsDue(AT("05:30"), AT("06:40"))).toBe(true);
   });
 });

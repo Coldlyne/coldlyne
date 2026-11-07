@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as sync } from "@/app/api/cron/sync/route";
 import { GET as watch } from "@/app/api/cron/watch/route";
 import { connectWithFields } from "@/application/connections";
@@ -14,11 +14,11 @@ import type { Env } from "@/infrastructure/env";
 import { createTestDatabase, createTestWorkspace } from "./support/database";
 import { fakeFetch } from "./support/fetch";
 
-const shared = vi.hoisted(() => ({ services: undefined as unknown }));
+const shared = vi.hoisted(() => ({ services: undefined as unknown, work: { sending: true, reading: true, watching: true, linking: false } }));
 const reads = vi.hoisted(() => [] as string[]);
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn(), cacheLife: () => {}, cacheTag: () => {} }));
 vi.mock("@/infrastructure/services", () => ({ appServices: () => shared.services }));
-vi.mock("@/app/api/cron/scheduled-work", () => ({ cronRefusal: () => null, scheduledWork: async () => ({ sending: true, reading: true, watching: true }) }));
+vi.mock("@/app/api/cron/scheduled-work", () => ({ cronRefusal: () => null, scheduledWork: async () => shared.work }));
 vi.mock("@/infrastructure/connectors", () => ({
   adapterOf: () => (context: { fields: Record<string, string> }) => ({
     check: async () => ({ ok: true, detail: "ok", label: "Compte" }),
@@ -41,6 +41,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   shared.services = { db, settings, fetch: fakeFetch([]).fetch, now: () => NOW } satisfies Services;
+  shared.work = { sending: true, reading: true, watching: true, linking: false };
   reads.length = 0;
   await db.delete(connection);
   await db.delete(watchlist);
@@ -62,6 +63,35 @@ describe("the hourly read", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ workspaces: 2, failed: 1 });
     expect(reads).toEqual(["bea@fine.fr"]);
+  });
+});
+
+describe("the hourly read, with only a linked CRM to look at", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const at = (time: string) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(time));
+    shared.work = { sending: false, reading: false, watching: false, linking: true };
+  };
+
+  it("stays idle outside the daily hour: nothing wakes either database", async () => {
+    at("2026-11-10T13:00:00Z");
+    shared.services = undefined;
+    expect(await (await sync(ask())).json()).toEqual({ workspaces: 0, added: 0, idle: true });
+  });
+
+  it("goes through in the daily hour", async () => {
+    at("2026-11-10T06:00:00Z");
+    expect(await (await sync(ask())).json()).toEqual({ workspaces: 0, added: 0, failed: 0 });
+  });
+
+  it("stays idle at that hour too when there's no link at all", async () => {
+    at("2026-11-10T06:00:00Z");
+    shared.work = { sending: false, reading: false, watching: false, linking: false };
+    expect(await (await sync(ask())).json()).toMatchObject({ idle: true });
   });
 });
 

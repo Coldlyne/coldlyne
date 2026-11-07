@@ -48,7 +48,7 @@ export async function connectAndFirstRead(services: Services, workspaceId: strin
 export async function readNow(services: Services, workspaceId: string, connectionId: string): Promise<Tried> {
   const opened = await openConnection(services, workspaceId, connectionId);
   if (!opened?.client.signalsSince && !opened?.client.meetingsSince && !opened?.client.offLimits) return { ok: false, error: "Cette connexion ne se lit pas\u00a0: c’est le service qui écrit à Coldlyne." };
-  const outcome = await syncConnection(services, workspaceId, opened);
+  const outcome = await syncConnection(services, workspaceId, opened, { atOnce: true });
   if ("why" in outcome) return { ok: false, error: outcome.why };
   if (outcome.excluded !== undefined) return { ok: true, said: `${plural(outcome.excluded, "nouvelle exclusion", "nouvelles exclusions")}, ${plural(outcome.handedOver ?? 0, "personne envoyée", "personnes envoyées")}.` };
   const dropped = outcome.read > outcome.added ? " Coldlyne ne garde que ce qui concerne les personnes que vous avez contactées." : "";

@@ -96,7 +96,7 @@ export const sourceTools: ToolRegistrar = (server, context) => {
     "push_to_crm",
     {
       title: "Send a prospect to the CRM",
-      description: "Creates or updates a prospect and their company in a connected CRM (HubSpot, Pipedrive, Sellsy, Axonaut, noCRM.io, folk, Soldlyne) and adds a note, such as what they replied; in Soldlyne, a deal too. It writes to the CRM and contacts nobody. Use it when someone shows interest: a connected Soldlyne already gets whoever replied, at each sync.",
+      description: "Creates or updates a prospect and their company in a connected CRM (HubSpot, Pipedrive, Sellsy, Axonaut, noCRM.io, folk, Soldlyne) and adds a note, such as what they replied; in Soldlyne, a deal too. It writes to the CRM and contacts nobody. Use it when someone shows interest: a connected Soldlyne already gets whoever replied, within the hour.",
       inputSchema: z.object({ connectionId: z.uuid(), prospectId: z.uuid(), note: z.string().min(1) }),
       annotations: { openWorldHint: true },
     },
