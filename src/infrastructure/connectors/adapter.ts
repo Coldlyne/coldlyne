@@ -6,6 +6,7 @@ import type {
   DnsManager,
   EmailSender,
   LetterPoster,
+  LinkedCrm,
   MeetingReader,
   Notifier,
   ReplyReader,
@@ -31,6 +32,6 @@ export interface AdapterContext {
 
 /** An adapter's client: the check every connection has, and the ports of its connector's capabilities. */
 export type AdapterClient = ConnectorClient &
-  Partial<EmailSender & ReplyReader & SmsSender & LetterPoster & Dialer & WhatsAppSender & MeetingReader & SheetReader & CompanySource & ContactPusher & Notifier & ReputationReader & DnsManager>;
+  Partial<EmailSender & ReplyReader & SmsSender & LetterPoster & Dialer & WhatsAppSender & MeetingReader & SheetReader & CompanySource & ContactPusher & LinkedCrm & Notifier & ReputationReader & DnsManager>;
 
 export type Adapter = (context: AdapterContext) => AdapterClient;

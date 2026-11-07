@@ -1,4 +1,5 @@
 import type { Signal } from "@/application/ports";
+import { isPublicMailDomain } from "@/domain/contacts";
 
 /**
  * What every calendar comes down to: who met whom, about what, and whether it still stands. Each
@@ -22,38 +23,13 @@ export interface Meeting {
   guests: MeetingGuest[];
 }
 
-/** Everyone's mailbox, not a company's: sharing one of these domains doesn't make someone a colleague. */
-const PUBLIC_MAIL_DOMAINS = new Set([
-  "gmail.com",
-  "googlemail.com",
-  "outlook.com",
-  "outlook.fr",
-  "hotmail.com",
-  "hotmail.fr",
-  "live.com",
-  "live.fr",
-  "msn.com",
-  "yahoo.com",
-  "yahoo.fr",
-  "icloud.com",
-  "me.com",
-  "mac.com",
-  "proton.me",
-  "protonmail.com",
-  "orange.fr",
-  "wanadoo.fr",
-  "free.fr",
-  "sfr.fr",
-  "laposte.net",
-]);
-
 const addressOf = (email: string) => email.trim().toLowerCase();
 const domainOf = (address: string) => address.slice(address.lastIndexOf("@") + 1);
 
 /** Whether a guest is outside the account's own domain, and so may be a prospect. */
 function isOutside(guest: string, account: string): boolean {
   if (guest === account) return false;
-  return PUBLIC_MAIL_DOMAINS.has(domainOf(account)) || domainOf(guest) !== domainOf(account);
+  return isPublicMailDomain(domainOf(account)) || domainOf(guest) !== domainOf(account);
 }
 
 // The signal has no workspace to read a time zone from, and Coldlyne's members are in France.

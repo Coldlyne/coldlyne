@@ -5,6 +5,7 @@ import { hubspot } from "./hubspot";
 import { nocrm } from "./nocrm";
 import { pipedrive } from "./pipedrive";
 import { sellsy } from "./sellsy";
+import { soldlyne } from "./soldlyne";
 
 /** The crm connectors, by kind. */
-export const crmAdapters: Record<string, Adapter> = { hubspot, pipedrive, sellsy, axonaut, nocrm, folk };
+export const crmAdapters: Record<string, Adapter> = { hubspot, pipedrive, sellsy, axonaut, nocrm, folk, soldlyne };

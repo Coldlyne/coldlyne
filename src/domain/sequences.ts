@@ -231,8 +231,10 @@ export const isSuppressed = (address: string, suppressed: ReadonlySet<string>) =
 
 /** What a workspace can't write to, by why, since each does something different. */
 export interface OffLimits {
-  /** Its own list, but for bounces: someone asked, or the workspace excluded them. Any of a person's details on it stops them. */
+  /** Its own list, but for bounces: someone asked, the workspace excluded them, or a linked CRM holds them. Any of a person's details on it stops them. */
   refused: ReadonlySet<string>;
+  /** The same but for what a linked CRM says: who isn't answered either. A deal is someone a member can still write back to; a refusal isn't. */
+  notAnswered: ReadonlySet<string>;
   /** Addresses that bounced for this workspace: a sequence goes on only through a step written for that. */
   bouncedHere: ReadonlySet<string>;
   /** Addresses that bounced for another workspace of its group: skipped, and the person isn't stopped. */

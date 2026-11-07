@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
-import type { Capability } from "@/domain/connectors";
+import { CONNECTORS, type Capability } from "@/domain/connectors";
 import { ProviderError } from "@/infrastructure/connectors/http";
 import { withoutSecrets } from "@/infrastructure/connectors/without-secrets";
 import { sameSecret } from "@/infrastructure/crypto/secrets";
@@ -10,6 +10,7 @@ import type { Database } from "@/infrastructure/db/client";
 import { sendOwnMail } from "@/infrastructure/mail/own-mail";
 import type { Channel, InboundRequest, Notification, Signal, SignalType } from "./ports";
 import { clientOf, connectionsWith, type OpenedConnection } from "./connections";
+import { syncLinkedCrm, type LinkSynced } from "./crm-link";
 import { addToSuppressionList, reactToSignals } from "./enrollments";
 import type { Services } from "./services";
 
@@ -130,7 +131,7 @@ export async function receiveHook(services: Services, connectionId: string, toke
 }
 
 /** The capabilities whose signals are read by asking the service, rather than posted by it. */
-export const POLLED: Capability[] = ["read_replies", "meetings"];
+export const POLLED: Capability[] = ["read_replies", "meetings", "linked_crm"];
 
 /**
  * Reads what arrived on every connection that is asked rather than posted to (mailboxes, OVH's
@@ -141,7 +142,8 @@ export async function syncWorkspace(services: Services, workspaceId: string): Pr
   const result = { read: 0, added: 0, failing: [] as string[] };
   const seen = new Set<string>();
   for (const capability of POLLED) {
-    for (const opened of await connectionsWith(services, workspaceId, capability)) {
+    // A linked CRM is read even after a failed read: it says who must not be prospected, and being down for an hour shouldn't end that until someone reconnects it.
+    for (const opened of await connectionsWith(services, workspaceId, capability, { evenFailing: capability === "linked_crm" })) {
       if (seen.has(opened.row.id)) continue;
       seen.add(opened.row.id);
       const outcome = await syncConnection(services, workspaceId, opened);
@@ -154,25 +156,28 @@ export async function syncWorkspace(services: Services, workspaceId: string): Pr
 
 const DAY_MS = 86_400_000;
 
-/** Reads one connection from where its last read stopped: what it found and kept, or why it couldn't. */
-export async function syncConnection(services: Services, workspaceId: string, opened: OpenedConnection): Promise<{ read: number; added: number } | { why: string }> {
+/** Reads one connection from where its last read stopped, a linked CRM both ways: what it found and kept, or why it couldn't. */
+export async function syncConnection(services: Services, workspaceId: string, opened: OpenedConnection): Promise<({ read: number; added: number } & Partial<LinkSynced>) | { why: string }> {
   const now = services.now();
   const since = new Date((opened.row.syncedAt ?? new Date(now.getTime() - 7 * DAY_MS)).getTime() - DAY_MS);
   try {
     const found = [...((await opened.client.signalsSince?.(since)) ?? []), ...((await opened.client.meetingsSince?.(since)) ?? [])];
     const added = await recordSignals(services.db, workspaceId, opened.row.id, found);
+    const linked = opened.client.offLimits ? await syncLinkedCrm(services, workspaceId, opened.row.id, opened.client.offLimits) : {};
     await withWorkspace(services.db, workspaceId, (tx) => tx.update(connection).set({ syncedAt: now, status: "connected", lastError: null }).where(eq(connection.id, opened.row.id)));
     await notifyAbout(services, workspaceId, added);
-    return { read: found.length, added: added.length };
+    return { read: found.length, added: added.length, ...linked };
   } catch (error) {
     await markFailing(services, workspaceId, opened.row.id, error);
     return { why: reasonOf(error) };
   }
 }
 
+const LINKED_KINDS = CONNECTORS.filter(({ capabilities }) => (capabilities as readonly Capability[]).includes("linked_crm")).map(({ kind }) => kind);
+
 /** Every workspace that has a connection to read, for the scheduled sync (trusted path). */
 export async function workspacesToSync(db: Database): Promise<string[]> {
-  const rows = await db.selectDistinct({ workspaceId: connection.workspaceId }).from(connection).where(eq(connection.status, "connected"));
+  const rows = await db.selectDistinct({ workspaceId: connection.workspaceId }).from(connection).where(or(eq(connection.status, "connected"), inArray(connection.kind, LINKED_KINDS)));
   return rows.map((row) => row.workspaceId);
 }
 

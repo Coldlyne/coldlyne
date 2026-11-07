@@ -67,7 +67,7 @@ Decided 2026-11-04. "Connect" means a workspace links its own account, except wh
 | **Calls** | Twilio Voice (calls from the app and the one-click voicemail drop), Aircall, Ringover |
 | **WhatsApp** | WhatsApp Business Platform (Meta's Cloud API) |
 | **Meetings** (a booked meeting counts as a result) | Google Calendar, Outlook calendar, Cal.com, Calendly |
-| **Where results go** | HubSpot, Pipedrive, Sellsy, Axonaut, noCRM.io, folk; Slack; signed outgoing webhooks (n8n, Make, Zapier); an API with keys that other apps read |
+| **Where results go** | HubSpot, Pipedrive, Sellsy, Axonaut, noCRM.io, folk, and Soldlyne, linked both ways (below); Slack; signed outgoing webhooks (n8n, Make, Zapier); an API with keys that other apps read |
 | **Sign-ups** | The business's site posts each sign-up to a signed address, which credits it |
 | **Deliverability** | Built in: SPF, DKIM, DMARC and MX checks. Connected: Google Postmaster Tools, and Vercel, Cloudflare and OVHcloud DNS to set a sending domain's records |
 | **The hosted edition** (Coldlyne's own accounts, not a workspace's) | Stripe for billing, Resend for its own mail |
@@ -79,6 +79,15 @@ Points of attention:
 - **Cold SMS.** The CNIL allows B2B prospecting, but Brevo, OVHcloud and smsmode ask for prior consent in their own terms, so an account can be suspended even when the prospecting is legal. A named SMS sender can't be answered: only STOPs come back.
 - **INPI.** Its technical documents have reusers commit not to use personal data for prospecting, so its data informs a message and never supplies who to contact; people come from the registry.
 - **Google.** Gmail's read scope is restricted and needs verification for public use; an external app still in Testing gets refresh tokens that expire after 7 days. An instance used only by its own organization avoids both with an Internal app.
+
+### Soldlyne, linked both ways
+
+Built 2026-11-07. [Soldlyne](https://github.com/Soldlyne/soldlyne) is the sister CRM. A workspace connects its own install on the Connections page, with the address and a key made there for this: it can hand someone over and say who's off limits, on the one product it was made for, and reads nothing else. It's sealed like any other. The address has to be public https, and a redirect is refused, so the key can't be led elsewhere. Connecting reads at once, then the hourly sync does it again, even after a failed read, since being down for an hour shouldn't end the link until someone reconnects it. Nothing here contacts anyone.
+
+- **Who replies becomes a deal.** At each sync, whoever replied and isn't in that CRM yet goes over, with what they wrote: a company, a person and a deal, or the ones already there. Someone a member read as not interested or the wrong person doesn't, nor does someone who opted out. What the CRM refuses waits for the next sync. A member can push anyone at any time, from a list or through `push_to_crm`. Soldlyne finds its records again, so a repeat adds nothing.
+- **Its customers and open deals are never prospected.** At each sync they join the workspace's own suppression list, with the reason `crm`, as their addresses, numbers and profiles, their company's domain, and the company as a whole by SIREN and by name, since a customer entered by hand may have nothing else. No sequence takes or goes on writing to them, whichever of their details is listed, and what waits for a member stops too. A provider's domain is never taken as a company's. An exact name can spare a namesake a message, which is the safe way to be wrong.
+- **What the list keeps.** Nothing comes off when someone leaves the CRM, is deleted there, or the connection goes, so a customer deleted by mistake isn't prospected that day. It also means a lost deal stays excluded: nothing lifts an exclusion yet, and bringing lost deals back is a decision for later. Only this workspace is affected, not the others of its group.
+- **What a member can still do.** Answer someone already in conversation: their deal doesn't silence them, though an opt-out still does. Someone asking to stop, or an address bouncing, replaces the CRM's word on the list, and a member's own exclusion stands.
 
 ## 6. Sequences
 

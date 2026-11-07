@@ -230,3 +230,47 @@ export function httpsUrl(text: string): URL | null {
   url.protocol = "https:";
   return url;
 }
+
+/** The site's bare host, "acme.fr" for "https://www.acme.fr/offres", or null. */
+export function siteDomain(website: string | null): string | null {
+  if (!website) return null;
+  try {
+    return new URL(/^https?:\/\//i.test(website) ? website : `https://${website}`).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** Everyone's mailbox, not a company's: sharing one of these domains says nothing of who someone works for. */
+const PUBLIC_MAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "outlook.fr",
+  "hotmail.com",
+  "hotmail.fr",
+  "live.com",
+  "live.fr",
+  "msn.com",
+  "yahoo.com",
+  "yahoo.fr",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "proton.me",
+  "protonmail.com",
+  "orange.fr",
+  "wanadoo.fr",
+  "free.fr",
+  "sfr.fr",
+  "laposte.net",
+  "aol.com",
+  "gmx.com",
+  "gmx.fr",
+  "bbox.fr",
+  "neuf.fr",
+  "yandex.com",
+  "zoho.com",
+]);
+
+export const isPublicMailDomain = (domain: string) => PUBLIC_MAIL_DOMAINS.has(domain);

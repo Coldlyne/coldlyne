@@ -111,7 +111,7 @@ export const prospectTools: ToolRegistrar = (server, context) => {
 
   server.registerTool(
     "list_suppressed",
-    { title: "Suppression list", description: "Who this workspace never writes to again, and why.", inputSchema: z.object({}), annotations: { readOnlyHint: true } },
+    { title: "Suppression list", description: "Who this workspace never writes to again, and why. The reason crm is someone a connected Soldlyne holds as a customer or an open deal, or a whole company as siren:… or company:…: no sequence writes to them, and a member can still answer someone already in conversation.", inputSchema: z.object({}), annotations: { readOnlyHint: true } },
     async () => answer({ suppressed: await suppressedOf(services.db, workspaceId) }),
   );
 };

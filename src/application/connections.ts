@@ -159,8 +159,8 @@ export async function openConnection(services: Services, workspaceId: string, co
 }
 
 /** The workspace's connections that can do this, opened. */
-export async function connectionsWith(services: Services, workspaceId: string, capability: Capability): Promise<OpenedConnection[]> {
-  const rows = await withWorkspace(services.db, workspaceId, (tx) => tx.select().from(connection).where(eq(connection.status, "connected")));
+export async function connectionsWith(services: Services, workspaceId: string, capability: Capability, { evenFailing = false } = {}): Promise<OpenedConnection[]> {
+  const rows = await withWorkspace(services.db, workspaceId, (tx) => tx.select().from(connection).where(evenFailing ? undefined : eq(connection.status, "connected")));
   return rows.filter((row) => (connectorOf(row.kind)?.capabilities as readonly Capability[] | undefined)?.includes(capability)).map((row) => clientOf(services, workspaceId, row));
 }
 

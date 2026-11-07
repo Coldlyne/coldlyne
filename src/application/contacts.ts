@@ -5,7 +5,7 @@ import type { Database } from "@/infrastructure/db/client";
 import { crmPush } from "@/infrastructure/db/schema/connections";
 import { company, contactDetail, person, prospect } from "@/infrastructure/db/schema/prospects";
 import { withWorkspace } from "@/infrastructure/db/tenant";
-import type { ContactPusher, CrmContact } from "./ports";
+import type { Channel, ContactPusher, CrmContact } from "./ports";
 import { openConnection } from "./connections";
 import { ownDetailsFirst } from "./directory";
 import type { Services } from "./services";
@@ -27,7 +27,7 @@ export async function contactsOf(db: Database, workspaceId: string, personIds: r
 }
 
 /** What a CRM needs to know about a prospect, from what the workspace holds. */
-async function crmContactOf(db: Database, workspaceId: string, prospectId: string, note: string): Promise<CrmContact | null> {
+async function crmContactOf(db: Database, workspaceId: string, prospectId: string, note: string, channel?: Channel): Promise<CrmContact | null> {
   return withWorkspace(db, workspaceId, async (tx) => {
     const [row] = await tx
       .select({ personId: person.id, firstName: person.firstName, lastName: person.lastName, role: person.role, company: company.name, siren: company.siren, website: company.website })
@@ -38,7 +38,7 @@ async function crmContactOf(db: Database, workspaceId: string, prospectId: strin
     if (!row) return null;
     const details = await tx.select({ kind: contactDetail.kind, value: contactDetail.value }).from(contactDetail).where(and(eq(contactDetail.personId, row.personId), inArray(contactDetail.kind, ["email", "phone"]))).orderBy(...ownDetailsFirst);
     const valueOf = (kind: string) => details.find((detail) => detail.kind === kind)?.value ?? null;
-    return { firstName: row.firstName, lastName: row.lastName, email: valueOf("email"), phone: valueOf("phone"), role: row.role, company: { name: row.company, siren: row.siren, website: row.website }, note };
+    return { firstName: row.firstName, lastName: row.lastName, email: valueOf("email"), phone: valueOf("phone"), role: row.role, company: { name: row.company, siren: row.siren, website: row.website }, note, channel };
   });
 }
 
@@ -47,13 +47,14 @@ export type Pushed = { ok: true; externalId: string; through: string; already: b
 /**
  * Sends a prospect to a connected CRM: created or updated there, with the note added. The same
  * note again changes nothing, so an assistant's retry can't repeat it on the CRM's timeline; with
- * no note, a push only brings the person up to date, as often as it's asked.
+ * no note, a push only brings the person up to date, as often as it's asked. It writes to the CRM
+ * and nowhere else: nobody is contacted.
  */
-export async function pushToCrm(services: Services, workspaceId: string, connectionId: string, prospectId: string, note: string): Promise<Pushed> {
+export async function pushToCrm(services: Services, workspaceId: string, connectionId: string, prospectId: string, note: string, channel?: Channel): Promise<Pushed> {
   const opened = await openConnection(services, workspaceId, connectionId);
   const pusher: Partial<ContactPusher> | undefined = opened?.client;
   if (!opened || !pusher?.pushContact) return { ok: false, error: "Cette connexion n’est pas un CRM." };
-  const contact = await crmContactOf(services.db, workspaceId, prospectId, note);
+  const contact = await crmContactOf(services.db, workspaceId, prospectId, note, channel);
   if (!contact) return { ok: false, error: "Ce prospect n’est pas dans cet espace." };
   const noteHash = note ? sha256(note) : "";
   const through = opened.row.label;

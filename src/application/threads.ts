@@ -7,6 +7,7 @@ import { enrollment, sequence, stepMessage } from "@/infrastructure/db/schema/se
 import { withWorkspace } from "@/infrastructure/db/tenant";
 import { openConnection } from "./connections";
 import { suppressedIn } from "./enrollments";
+import { addressesOf, lastReply } from "./replies";
 import type { Services } from "./services";
 import { recordOutreach, recordSignals } from "./signals";
 import { unsubscribeUrl } from "./unsubscribe";
@@ -48,29 +49,6 @@ export async function conversationsOf(db: Database, workspaceId: string, interes
     const conversations = await Promise.all(rows.map(async ({ personId, ...row }) => ({ ...row, ...(await lastReply(tx, personId, row.prospectId)) })));
     return conversations.sort((a, b) => (b.lastAt?.getTime() ?? 0) - (a.lastAt?.getTime() ?? 0));
   });
-}
-
-/** The addresses someone is known by, for finding what came from them. */
-async function addressesOf(tx: Database, personId: string, prospectId: string): Promise<string[]> {
-  const details = await tx.select({ value: contactDetail.value }).from(contactDetail).where(eq(contactDetail.personId, personId));
-  const reached = await tx
-    .selectDistinct({ address: outreach.address })
-    .from(outreach)
-    .innerJoin(enrollment, eq(enrollment.id, outreach.enrollmentId))
-    .where(eq(enrollment.prospectId, prospectId));
-  return [...new Set([...details.map((row) => row.value), ...reached.map((row) => row.address)])];
-}
-
-async function lastReply(tx: Database, personId: string, prospectId: string) {
-  const addresses = await addressesOf(tx, personId, prospectId);
-  if (addresses.length === 0) return { lastAt: null, lastDetail: null };
-  const [last] = await tx
-    .select({ lastAt: signal.at, lastDetail: signal.detail })
-    .from(signal)
-    .where(and(inArray(signal.address, addresses), inArray(signal.type, ["replied", "meeting_booked", "opted_out"])))
-    .orderBy(desc(signal.at))
-    .limit(1);
-  return last ?? { lastAt: null, lastDetail: null };
 }
 
 export interface ThreadItem {
@@ -152,8 +130,8 @@ export async function replyToProspect(services: Services, workspaceId: string, p
   if (!sender) return { ok: false, error: "Indiquez dans les Réglages le nom et l’adresse de l’expéditeur." };
   const context = await replyContext(services.db, workspaceId, prospectId);
   if (!context) return { ok: false, error: "Rien n’a encore été envoyé à cette personne par email." };
-  const { refused, bouncedHere, bouncedElsewhere } = context.suppressed;
-  if ([context.address, ...context.details].some((value) => isSuppressed(value, refused)) || isSuppressed(context.address, bouncedHere) || isSuppressed(context.address, bouncedElsewhere)) return { ok: false, error: "Cette personne a demandé à ne plus être contactée." };
+  const { notAnswered, bouncedHere, bouncedElsewhere } = context.suppressed;
+  if ([context.address, ...context.details].some((value) => isSuppressed(value, notAnswered)) || isSuppressed(context.address, bouncedHere) || isSuppressed(context.address, bouncedElsewhere)) return { ok: false, error: "Cette personne a demandé à ne plus être contactée." };
   const opened = context.mailboxId ? await openConnection(services, workspaceId, context.mailboxId) : null;
   if (!opened?.client.sendEmail) return { ok: false, error: "La boîte de cette conversation n’est plus connectée." };
   const url = unsubscribeUrl(services.settings, workspaceId, context.address);

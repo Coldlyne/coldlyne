@@ -1,5 +1,6 @@
+import { connectorOf, type Capability } from "@/domain/connectors";
 import type { DnsRecord } from "@/domain/deliverability";
-import { checkConnection, openConnection } from "./connections";
+import { checkConnection, connectWithFields, openConnection } from "./connections";
 import type { CompanyFacts, DomainReputation } from "./ports";
 import { syncConnection } from "./signals";
 import type { Services } from "./services";
@@ -32,12 +33,24 @@ export async function sendTestAlert(services: Services, workspaceId: string, con
   return { ok: true, said: `Alerte envoyée par ${opened.row.label}.` };
 }
 
+/**
+ * Connects a service from what the member typed. A linked CRM is read at once: until it is, the
+ * workspace doesn't know who its customers are, and a sequence could write to them. If that read
+ * fails, the connection says so on its page.
+ */
+export async function connectAndFirstRead(services: Services, workspaceId: string, userId: string, kind: string, given: Record<string, unknown>) {
+  const connected = await connectWithFields(services, workspaceId, userId, kind, given);
+  if (connected.ok && (connectorOf(kind)?.capabilities as readonly Capability[] | undefined)?.includes("linked_crm")) await readNow(services, workspaceId, connected.connection.id);
+  return connected;
+}
+
 /** Reads what arrived on one connection now, rather than at the next scheduled read. */
 export async function readNow(services: Services, workspaceId: string, connectionId: string): Promise<Tried> {
   const opened = await openConnection(services, workspaceId, connectionId);
-  if (!opened?.client.signalsSince && !opened?.client.meetingsSince) return { ok: false, error: "Cette connexion ne se lit pas\u00a0: c’est le service qui écrit à Coldlyne." };
+  if (!opened?.client.signalsSince && !opened?.client.meetingsSince && !opened?.client.offLimits) return { ok: false, error: "Cette connexion ne se lit pas\u00a0: c’est le service qui écrit à Coldlyne." };
   const outcome = await syncConnection(services, workspaceId, opened);
   if ("why" in outcome) return { ok: false, error: outcome.why };
+  if (outcome.excluded !== undefined) return { ok: true, said: `${plural(outcome.excluded, "nouvelle exclusion", "nouvelles exclusions")}, ${plural(outcome.handedOver ?? 0, "personne envoyée", "personnes envoyées")}.` };
   const dropped = outcome.read > outcome.added ? " Coldlyne ne garde que ce qui concerne les personnes que vous avez contactées." : "";
   return { ok: true, said: `${plural(outcome.read, "élément lu", "éléments lus")}, ${plural(outcome.added, "nouveau retenu", "nouveaux retenus")}.${dropped}` };
 }

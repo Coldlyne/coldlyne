@@ -29,6 +29,7 @@ import { connection, outreach, signal } from "@/infrastructure/db/schema/connect
 import { company, contactDetail, person, whatsappConsent } from "@/infrastructure/db/schema/prospects";
 import { enrollment, sequence, sequenceStep, stepMessage } from "@/infrastructure/db/schema/sequences";
 import { withWorkspace } from "@/infrastructure/db/tenant";
+import { companyIsExcluded } from "@/domain/crm-exclusions";
 import type { Database } from "@/infrastructure/db/client";
 import { ProviderError } from "@/infrastructure/connectors/http";
 import { withoutSecrets } from "@/infrastructure/connectors/without-secrets";
@@ -290,6 +291,7 @@ interface PersonFacts {
   contacts: { kind: string; value: string; page: string | null }[];
   whatsappConsent: boolean;
   address: { name: string; company: string; street: string | null; postcode: string | null; city: string | null };
+  company: { name: string; siren: string | null; website: string | null };
   suppressed: OffLimits;
   /** What this enrollment already wrote to, the latest first: a conversation keeps its address. */
   used: string[];
@@ -298,7 +300,7 @@ interface PersonFacts {
 async function factsOf(tick: Tick, due: DueEnrollment): Promise<PersonFacts> {
   return withWorkspace(tick.services.db, tick.workspaceId, async (tx) => {
     const [row] = await tx
-      .select({ firstName: person.firstName, lastName: person.lastName, role: person.role, source: person.source, consent: whatsappConsent.agreedAt, company: company.name, street: company.street, postcode: company.postcode, city: company.city })
+      .select({ firstName: person.firstName, lastName: person.lastName, role: person.role, source: person.source, consent: whatsappConsent.agreedAt, company: company.name, siren: company.siren, website: company.website, street: company.street, postcode: company.postcode, city: company.city })
       .from(person)
       .innerJoin(company, eq(company.id, person.companyId))
       .leftJoin(whatsappConsent, eq(whatsappConsent.personId, person.id))
@@ -312,6 +314,7 @@ async function factsOf(tick: Tick, due: DueEnrollment): Promise<PersonFacts> {
       contacts,
       whatsappConsent: row.consent !== null,
       address: { name: fullName, company: row.company, street: row.street, postcode: row.postcode, city: row.city },
+      company: { name: row.company, siren: row.siren, website: row.website },
       suppressed: await suppressedIn(tx),
       used: used.map(({ address }) => address),
     };
@@ -335,7 +338,7 @@ async function process(tick: Tick, due: DueEnrollment) {
   const steps = tick.steps.get(due.sequenceId) ?? [];
   const facts = await factsOf(tick, due);
   // Any of their details on this workspace's own list stops them, not only the one the next step would use: sharing gives someone addresses this workspace never chose.
-  if (facts.contacts.some(({ value }) => isSuppressed(value, facts.suppressed.refused))) return stop(tick, due, "suppressed");
+  if (facts.contacts.some(({ value }) => isSuppressed(value, facts.suppressed.refused)) || companyIsExcluded(facts.company, facts.suppressed.refused)) return stop(tick, due, "suppressed");
   let position = due.lastPosition;
   const outcome = due.lastOutcome as StepOutcome | null;
   for (let turn = 0; turn <= steps.length; turn++) {

@@ -51,15 +51,7 @@ export async function checkAccount(account: () => Promise<string>): Promise<Chec
 /** "Jeanne Dupont-Martin", or the last name alone. */
 export const fullName = (contact: CrmContact) => [contact.firstName, contact.lastName].filter(Boolean).join(" ");
 
-/** The site's bare host, "acme.fr" for "https://www.acme.fr/offres", or null. */
-export function domainOf(website: string | null): string | null {
-  if (!website) return null;
-  try {
-    return new URL(/^https?:\/\//i.test(website) ? website : `https://${website}`).hostname.replace(/^www\./, "").toLowerCase();
-  } catch {
-    return null;
-  }
-}
+export { siteDomain as domainOf } from "@/domain/contacts";
 
 /** The fields that have a value: an update never erases what the CRM knows and Coldlyne doesn't. */
 export function known<T extends Record<string, unknown>>(fields: T): Partial<T> {

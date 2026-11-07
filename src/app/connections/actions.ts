@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { startOAuthConnection } from "@/application/connection-grants";
-import { factsOf, readNow, sendTestAlert, tryCheck, tryTestEmail, type Tried } from "@/application/connection-use";
-import { connectWithFields, disconnect } from "@/application/connections";
+import { connectAndFirstRead, factsOf, readNow, sendTestAlert, tryCheck, tryTestEmail, type Tried } from "@/application/connection-use";
+import { disconnect } from "@/application/connections";
 import { resumeMailbox } from "@/application/scheduler";
 import { currentSeat } from "@/infrastructure/auth/session";
 import { appServices } from "@/infrastructure/services";
@@ -17,7 +17,7 @@ export interface ConnectState {
 /** Connects a service from what the member typed; the service answers before anything is saved. */
 export async function connectAction(kind: string, _previous: ConnectState, formData: FormData): Promise<ConnectState> {
   const seat = await currentSeat();
-  const result = await connectWithFields(appServices(), seat.workspaceId, seat.userId, kind, Object.fromEntries(formData));
+  const result = await connectAndFirstRead(appServices(), seat.workspaceId, seat.userId, kind, Object.fromEntries(formData));
   if (!result.ok) return { error: result.error };
   revalidatePath(`/connections/${kind}`);
   return { connected: result.connection.label };

@@ -54,7 +54,7 @@ function Connection({ connection, connector }: { connection: ConnectionView; con
         {connection.pausedReason && <TryButton action={bound(resumeAction)} label="Reprendre les envois" busy="…" />}
         {can("send_email") && <TryButton action={bound(testEmailAction)} label="M’envoyer un email de test" busy="Envoi…" />}
         {can("notify") && <TryButton action={bound(testAlertAction)} label="Envoyer une alerte de test" busy="Envoi…" />}
-        {(can("read_replies") || can("meetings")) && <TryButton action={bound(readNowAction)} label="Lire maintenant" busy="Lecture…" />}
+        {(can("read_replies") || can("meetings") || can("linked_crm")) && <TryButton action={bound(readNowAction)} label="Lire maintenant" busy="Lecture…" />}
         {links.map((link) => (
           <Link key={link.href} href={link.href} className={QUIET_BUTTON}>
             {link.label}

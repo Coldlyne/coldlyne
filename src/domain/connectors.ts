@@ -22,6 +22,7 @@ export type Capability =
   | "send_whatsapp"
   | "meetings"
   | "push_contacts"
+  | "linked_crm"
   | "notify"
   | "reputation"
   | "dns_records"
@@ -366,6 +367,16 @@ export const CONNECTORS = [
     authorization: { kind: "fields", fields: [secret("apiKey", "Clé d’API")] },
     hosting: "EU",
     docs: "https://developer.folk.app/",
+  },
+  {
+    kind: "soldlyne",
+    name: "Soldlyne",
+    category: "crm",
+    summary: "Ceux qui répondent deviennent une affaire, et ses clients et affaires en cours ne sont jamais prospectés.",
+    capabilities: ["push_contacts", "linked_crm"],
+    authorization: { kind: "fields", fields: [plain("address", "Adresse de votre Soldlyne", { placeholder: "https://app.soldlyne.com" }), secret("apiKey", "Clé pour Coldlyne")] },
+    hosting: "EU",
+    docs: "https://github.com/Soldlyne/soldlyne#connecting-coldlyne",
   },
   {
     kind: "slack",

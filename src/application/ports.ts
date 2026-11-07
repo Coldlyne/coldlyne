@@ -1,5 +1,6 @@
 import type { Channel } from "@/domain/sequences";
 import type { Capability } from "@/domain/connectors";
+import type { OffLimitsEntry } from "@/domain/crm-exclusions";
 import type { DnsRecord } from "@/domain/deliverability";
 
 /**
@@ -160,11 +161,18 @@ export interface CrmContact {
   company: { name: string; siren: string | null; website: string | null };
   /** What happened, in a line: "A répondu à l'email 2 : intéressé". Empty when there's nothing to add. */
   note: string;
+  /** Through which channel it happened, when something did. */
+  channel?: Channel;
 }
 
 export interface ContactPusher {
   /** Creates or updates the person and their company, and adds the note. */
   pushContact(contact: CrmContact): Promise<{ externalId: string }>;
+}
+
+/** A CRM linked both ways: who it holds as customers and open deals, whom a workspace must not prospect. */
+export interface LinkedCrm {
+  offLimits(): Promise<OffLimitsEntry[]>;
 }
 
 export interface Notification {
@@ -229,6 +237,7 @@ export interface Ports {
   send_whatsapp: WhatsAppSender;
   meetings: MeetingReader;
   push_contacts: ContactPusher;
+  linked_crm: LinkedCrm;
   notify: Notifier;
   reputation: ReputationReader;
   dns_records: DnsManager;

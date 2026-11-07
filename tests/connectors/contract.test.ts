@@ -17,6 +17,7 @@ const METHODS: Record<Capability, (keyof AdapterClient)[]> = {
   send_whatsapp: ["sendTemplate"],
   meetings: ["meetingsSince"],
   push_contacts: ["pushContact"],
+  linked_crm: ["offLimits"],
   notify: ["notify"],
   reputation: ["reputation"],
   dns_records: ["records", "upsertRecord"],
